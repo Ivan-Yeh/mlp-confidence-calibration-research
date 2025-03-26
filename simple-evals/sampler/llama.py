@@ -4,7 +4,7 @@ import transformers
 from huggingface_hub import snapshot_download, login
 import os
 
-login(token=os.environ.get(["HF_TOKEN"]))
+login(token="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")
 
 local_dir = snapshot_download(repo_id="meta-llama/Llama-3.2-3B-Instruct")
 
