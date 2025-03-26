@@ -16,6 +16,7 @@ from .sampler.chat_completion_sampler import (
 )
 from .sampler.o_chat_completion_sampler import OChatCompletionSampler
 from .sampler.claude_sampler import ClaudeCompletionSampler, CLAUDE_SYSTEM_MESSAGE_LMSYS
+from .sampler.llama_sampler import Llama3BSample
 
 
 def main():
@@ -34,71 +35,72 @@ def main():
     args = parser.parse_args()
 
     models = {
+        "Llama-3.2-3B-Instruct": Llama3BSample(),
         # chatgpt models:
-        "gpt-4o-2024-11-20_assistant": ChatCompletionSampler(
-            model="gpt-4o-2024-11-20",
-            system_message=OPENAI_SYSTEM_MESSAGE_API,
-            max_tokens=2048,
-        ),
-        "gpt-4o-2024-11-20_chatgpt": ChatCompletionSampler(
-            model="gpt-4o-2024-11-20",
-            system_message=OPENAI_SYSTEM_MESSAGE_CHATGPT,
-            max_tokens=2048,
-        ),
-        "o1": OChatCompletionSampler(
-            model="o1",
-        ),
-        "o1-preview": OChatCompletionSampler(
-            model="o1-preview",
-        ),
-        "o1-mini": OChatCompletionSampler(
-            model="o1-mini",
-        ),
-        # Default == Medium
-        "o3-mini": OChatCompletionSampler(
-            model="o3-mini",
-        ),
-        "o3-mini_high": OChatCompletionSampler(
-            model="o3-mini",
-            reasoning_effort="high",
-        ),
-        "o3-mini_low": OChatCompletionSampler(
-            model="o3-mini",
-            reasoning_effort="low",
-        ),
-        "gpt-4-turbo-2024-04-09_assistant": ChatCompletionSampler(
-            model="gpt-4-turbo-2024-04-09",
-            system_message=OPENAI_SYSTEM_MESSAGE_API,
-        ),
-        "gpt-4-turbo-2024-04-09_chatgpt": ChatCompletionSampler(
-            model="gpt-4-turbo-2024-04-09",
-            system_message=OPENAI_SYSTEM_MESSAGE_CHATGPT,
-        ),
-        "gpt-4o_assistant": ChatCompletionSampler(
-            model="gpt-4o",
-            system_message=OPENAI_SYSTEM_MESSAGE_API,
-            max_tokens=2048,
-        ),
-        "gpt-4o_chatgpt": ChatCompletionSampler(
-            model="gpt-4o",
-            system_message=OPENAI_SYSTEM_MESSAGE_CHATGPT,
-            max_tokens=2048,
-        ),
-        "gpt-4o-mini-2024-07-18": ChatCompletionSampler(
-            model="gpt-4o-mini-2024-07-18",
-            system_message=OPENAI_SYSTEM_MESSAGE_API,
-            max_tokens=2048,
-        ),
-        "gpt-4.5-preview-2025-02-27": ChatCompletionSampler(
-            model="gpt-4.5-preview-2025-02-27",
-            system_message=OPENAI_SYSTEM_MESSAGE_API,
-            max_tokens=2048,
-        ), 
-        # claude models:
-        "claude-3-opus-20240229_empty": ClaudeCompletionSampler(
-            model="claude-3-opus-20240229",
-            system_message=CLAUDE_SYSTEM_MESSAGE_LMSYS,
-        ),
+        # "gpt-4o-2024-11-20_assistant": ChatCompletionSampler(
+        #     model="gpt-4o-2024-11-20",
+        #     system_message=OPENAI_SYSTEM_MESSAGE_API,
+        #     max_tokens=2048,
+        # ),
+        # "gpt-4o-2024-11-20_chatgpt": ChatCompletionSampler(
+        #     model="gpt-4o-2024-11-20",
+        #     system_message=OPENAI_SYSTEM_MESSAGE_CHATGPT,
+        #     max_tokens=2048,
+        # ),
+        # "o1": OChatCompletionSampler(
+        #     model="o1",
+        # ),
+        # "o1-preview": OChatCompletionSampler(
+        #     model="o1-preview",
+        # ),
+        # "o1-mini": OChatCompletionSampler(
+        #     model="o1-mini",
+        # ),
+        # # Default == Medium
+        # "o3-mini": OChatCompletionSampler(
+        #     model="o3-mini",
+        # ),
+        # "o3-mini_high": OChatCompletionSampler(
+        #     model="o3-mini",
+        #     reasoning_effort="high",
+        # ),
+        # "o3-mini_low": OChatCompletionSampler(
+        #     model="o3-mini",
+        #     reasoning_effort="low",
+        # ),
+        # "gpt-4-turbo-2024-04-09_assistant": ChatCompletionSampler(
+        #     model="gpt-4-turbo-2024-04-09",
+        #     system_message=OPENAI_SYSTEM_MESSAGE_API,
+        # ),
+        # "gpt-4-turbo-2024-04-09_chatgpt": ChatCompletionSampler(
+        #     model="gpt-4-turbo-2024-04-09",
+        #     system_message=OPENAI_SYSTEM_MESSAGE_CHATGPT,
+        # ),
+        # "gpt-4o_assistant": ChatCompletionSampler(
+        #     model="gpt-4o",
+        #     system_message=OPENAI_SYSTEM_MESSAGE_API,
+        #     max_tokens=2048,
+        # ),
+        # "gpt-4o_chatgpt": ChatCompletionSampler(
+        #     model="gpt-4o",
+        #     system_message=OPENAI_SYSTEM_MESSAGE_CHATGPT,
+        #     max_tokens=2048,
+        # ),
+        # "gpt-4o-mini-2024-07-18": ChatCompletionSampler(
+        #     model="gpt-4o-mini-2024-07-18",
+        #     system_message=OPENAI_SYSTEM_MESSAGE_API,
+        #     max_tokens=2048,
+        # ),
+        # "gpt-4.5-preview-2025-02-27": ChatCompletionSampler(
+        #     model="gpt-4.5-preview-2025-02-27",
+        #     system_message=OPENAI_SYSTEM_MESSAGE_API,
+        #     max_tokens=2048,
+        # ), 
+        # # claude models:
+        # "claude-3-opus-20240229_empty": ClaudeCompletionSampler(
+        #     model="claude-3-opus-20240229",
+        #     system_message=CLAUDE_SYSTEM_MESSAGE_LMSYS,
+        # ),
     }
 
     if args.list_models:
@@ -113,8 +115,11 @@ def main():
             return
         models = {args.model: models[args.model]}
 
-    grading_sampler = ChatCompletionSampler(model="gpt-4o")
-    equality_checker = ChatCompletionSampler(model="gpt-4-turbo-preview")
+    # grading_sampler = ChatCompletionSampler(model="gpt-4o")
+    # equality_checker = ChatCompletionSampler(model="gpt-4-turbo-preview")
+    grading_sampler = Llama3BSample()
+    equality_checker = Llama3BSample()
+
     # ^^^ used for fuzzy matching, just for math
 
     def get_evals(eval_name, debug_mode):
@@ -154,7 +159,8 @@ def main():
 
     evals = {
         eval_name: get_evals(eval_name, args.debug)
-        for eval_name in ["simpleqa", "mmlu", "math", "gpqa", "mgsm", "drop", "humaneval"]
+        # for eval_name in ["simpleqa", "mmlu", "math", "gpqa", "mgsm", "drop", "humaneval"]
+        for eval_name in ["simpleqa"]
     }
     print(evals)
     debug_suffix = "_DEBUG" if args.debug else ""
@@ -165,13 +171,13 @@ def main():
             result = eval_obj(sampler)
             # ^^^ how to use a sampler
             file_stem = f"{eval_name}_{model_name}"
-            report_filename = f"/tmp/{file_stem}{debug_suffix}.html"
+            report_filename = f"./tmp/{file_stem}{debug_suffix}.html"
             print(f"Writing report to {report_filename}")
-            with open(report_filename, "w") as fh:
+            with open(report_filename, "w", encoding="utf-8") as fh:
                 fh.write(common.make_report(result))
             metrics = result.metrics | {"score": result.score}
             print(metrics)
-            result_filename = f"/tmp/{file_stem}{debug_suffix}.json"
+            result_filename = f"./tmp/{file_stem}{debug_suffix}.json"
             with open(result_filename, "w") as f:
                 f.write(json.dumps(metrics, indent=2))
             print(f"Writing results to {result_filename}")

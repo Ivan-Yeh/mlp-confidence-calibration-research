@@ -1,0 +1,10 @@
+{
+  "is_correct": 0.4,
+  "is_correct:std": 0.48989794855663565,
+  "is_incorrect": 0.0,
+  "is_incorrect:std": 0.0,
+  "is_not_attempted": 0.6,
+  "is_not_attempted:std": 0.48989794855663565,
+  "score:std": 0.48989794855663565,
+  "score": 0.4
+}
