@@ -33,7 +33,7 @@ def get_response(query, message_history=[], max_tokens=2048, temperature=0.6, to
 def response_from_msg_list(msg_list: list[dict], message_history=[], max_tokens=2048, temperature=0.6, top_p=0.9, confidence=False):
     if confidence:
         for x in range(len(msg_list)):
-            msg_list[x]["content"] += " At the end of your response, add your confidence in percentage in the correctness of your response in brackets."
+            msg_list[x]["content"] += " At the end of your response, add your confidence in percentage, percentage only without explanation, in the correctness of your response in brackets."
     user_prompt = msg_list
     print("message list:", user_prompt)
     prompt = pipeline.tokenizer.apply_chat_template(
