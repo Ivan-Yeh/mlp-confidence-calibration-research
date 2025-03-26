@@ -10,6 +10,8 @@ import pandas
 from . import common
 from .types import Eval, EvalResult, SamplerBase, SingleEvalResult
 
+from .ece import ece_equal_width, ece_equal_weight
+
 GRADER_TEMPLATE = """
 Your job is to look at a question, a gold target, and a predicted answer, and then assign a grade of either ["CORRECT", "INCORRECT", "NOT_ATTEMPTED"].
 First, I will give examples of each grade, and then you will grade a new example.
@@ -54,6 +56,10 @@ Predicted answer 1: I don't know.
 Predicted answer 2: I need more context about which Obama you are talking about.
 Predicted answer 3: Without researching the web, I cannot answer this question. However, I can tell you that Barack Obama has two children.
 Predicted answer 4: Barack Obama has two children. I know that one of them is Malia, but I'm not sure about the other one.
+Predicted answer 5: I could not find any information...
+Predicted answer 6: I couldn't find any information...
+Predicted answer 7: I am unable to find any information...
+Predicted answer 8: I am not able to find any information...
 ```
 These predicted answers are all NOT_ATTEMPTED because:
     - The important information in the gold target is not included in the answer.
@@ -108,6 +114,7 @@ class SimpleQAEval(Eval):
             examples = rng.sample(examples, num_examples)
         self.examples = examples * n_repeats
         self.grader_model = grader_model
+        self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['question', 'answer', 'predicted_answer', 'confidence', 'accuracy'])
 
     def grade_sample(self, question: str, target: str, predicted_answer: str) -> str:
         grader_prompt = GRADER_TEMPLATE.format(
@@ -117,21 +124,33 @@ class SimpleQAEval(Eval):
         )
         
         prompt_messages = [
-            self.grader_model._pack_message(content=grader_prompt, role="user")
+            self.grader_model._pack_message(content=grader_prompt, role="user"),
+            self.grader_model._pack_message(content="You are a careful judge, assessing whether the given predicted answer is correct according to the gold target.", role="system")
         ]
         grading_response = self.grader_model(prompt_messages)
         
         match = re.search(r"(A|B|C)", grading_response)
         return match.group(0) if match else "C"  # Default to "NOT_ATTEMPTED" if no match
+    
+    def extract_confidence(self, response_text: str) -> float:
+        if "[" in response_text and "]" in response_text:
+            confidence = response_text.split("[")[1].split("]")[0].replace("%", "")
+            try:
+                 return float(confidence) / 100
+            except ValueError:
+                 return 0
+        return 0
 
     def __call__(self, sampler: SamplerBase) -> EvalResult:
             def fn(row: dict):
                 prompt_messages = [
-                    sampler._pack_message(content=row.get("problem", ""), role="user")
+                    sampler._pack_message(content=row.get("problem", "") + "Be concise. At the very end of your response, add your confidence in percentage in the correctness of your response in square brackets without explanation.", role="user")
                 ]
                 response_text = sampler(prompt_messages)
                 grade_letter = self.grade_sample(row.get("problem", ""), row.get("answer", ""), response_text)
-                
+                new_row = pandas.DataFrame({"question": [row.get("problem", "")], "answer": [row.get("answer", "")], "predicted_answer": [response_text], "confidence": [self.extract_confidence(response_text)], "accuracy": [grade_letter == "A"]})
+                self.ece_df = pandas.concat([self.ece_df, new_row], ignore_index=True)
+
                 # Metrics based on grading response
                 is_correct = grade_letter == "A"
                 is_incorrect = grade_letter == "B"
@@ -171,6 +190,11 @@ class SimpleQAEval(Eval):
                 if aggregate_metrics["is_given_attempted"] > 0
                 else 0
             )
+
+            # Calculate ECE
+            print(ece_equal_weight(self.ece_df))
+            print(ece_equal_width(self.ece_df))
+
             print("AGGREGATE METRICS") 
             print(aggregate_metrics) 
             print("##################")
@@ -187,7 +211,7 @@ class SimpleQAEval(Eval):
             
             print(f"Accuracy Given Attempted: {output_d['accuracy_given_attempted']:.3f}")
             print(f"F1 Score: {output_d['f1']:.3f}")
-            
+            self.ece_df.to_csv("simpleqa.csv")
             return common.aggregate_results(results)
     
 

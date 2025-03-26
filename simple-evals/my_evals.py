@@ -10,7 +10,12 @@ from .mgsm_eval import MGSMEval
 from .mmlu_eval import MMLUEval
 from .simpleqa_eval import SimpleQAEval
 
-from .sampler.llama_sampler import LlamaSampler
+from .sampler.hf_sampler import HFSampler
+
+import torch
+import transformers
+from huggingface_hub import snapshot_download, login
+import os
 
 
 def main():
@@ -28,29 +33,29 @@ def main():
 
     args = parser.parse_args()
 
-    models = {
-        # chatgpt models:
-        "llama-3.2-3b-instruct": LlamaSampler(
-            model="llama-3.2-3b-instruct",
-            max_tokens=2048,
-            confidence=True
-        ),
-    }
+    models_ls = ["meta-llama/Llama-3.2-3B-Instruct", "meta-llama/Llama-3.1-8B-Instruct"]
 
     if args.list_models:
         print("Available models:")
-        for model_name in models.keys():
+        for model_name in models_ls:
             print(f" - {model_name}")
         return
 
     if args.model:
-        if args.model not in models:
+        if args.model not in models_ls:
             print(f"Error: Model '{args.model}' not found.")
             return
-        models = {args.model: models[args.model]}
+        
 
-    grading_sampler = LlamaSampler(model="llama-3.2-3b-instruct", max_tokens=2048, confidence=False)
-    equality_checker = LlamaSampler(model="llama-3.2-3b-instruct", max_tokens=2048, confidence=False)
+    login(token=os.environ["HF_TOKEN"])
+    local_dir = snapshot_download(repo_id=args.model)
+    pipeline: transformers.pipeline = transformers.pipeline("text-generation", model=local_dir, device_map="auto", model_kwargs={"torch_dtype": torch.float16, "low_cpu_mem_usage": True})
+    terminators = [pipeline.tokenizer.eos_token_id, pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")]
+    
+    models = {args.model: HFSampler(pipeline=pipeline, terminators=terminators, model="meta-llama/Llama-3.1-8B-Instruct", max_tokens=2048),}
+
+    grading_sampler = HFSampler(pipeline, terminators, model=args.model, max_tokens=2048)
+    equality_checker = HFSampler(pipeline, terminators, model=args.model, max_tokens=2048)
     # ^^^ used for fuzzy matching, just for math
 
     def get_evals(eval_name, debug_mode):
@@ -100,7 +105,7 @@ def main():
         for eval_name, eval_obj in evals.items():
             result = eval_obj(sampler)
             # ^^^ how to use a sampler
-            file_stem = f"{eval_name}_{model_name}"
+            file_stem = f"{eval_name}_{model_name.split("/")[-1]}"
             report_filename = f"./tmp/{file_stem}{debug_suffix}.html"
             print(f"Writing report to {report_filename}")
             with open(report_filename, "w") as fh:

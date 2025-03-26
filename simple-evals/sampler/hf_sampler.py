@@ -2,25 +2,27 @@ import base64
 import time
 from typing import Any
 
-from .llama import response_from_msg_list, get_response
+from .huggingface_models import response_from_msg_list
 
 from ..types import MessageList, SamplerBase
 
 
-class LlamaSampler(SamplerBase):
+class HFSampler(SamplerBase):
     """
-    Sample from llama-3.2-3b-instruct
+    Sample from huggingface_models
     """
 
     def __init__(
         self,
-        model: str = "llama-3.2-3b-instruct",
+        pipeline,
+        terminators, 
+        model: str = "HG Model",
         system_message: str | None = None,
         temperature: float = 0.5,
-        max_tokens: int = 1024,
-        confidence = False):
+        max_tokens: int = 2048):
 
-        self.confidence = confidence
+        self.pipeline = pipeline
+        self.terminators = terminators
         self.model = model
         self.system_message = system_message
         self.temperature = temperature
@@ -50,7 +52,7 @@ class LlamaSampler(SamplerBase):
         trial = 0
         while True:
             try:
-                response = response_from_msg_list(message_list, [], self.max_tokens, self.temperature, 0.9, self.confidence)
+                response = response_from_msg_list(message_list, self.pipeline, self.terminators, self.max_tokens, self.temperature, 0.9)
                 return response
             # NOTE: BadRequestError is triggered once for MMMU, please uncomment if you are reruning MMMU
             except Exception as e:
