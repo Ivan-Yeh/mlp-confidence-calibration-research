@@ -149,7 +149,7 @@ class SimpleQAEval(Eval):
                 response_text = sampler(prompt_messages)
                 grade_letter = self.grade_sample(row.get("problem", ""), row.get("answer", ""), response_text)
                 new_row = pandas.DataFrame({"question": [row.get("problem", "")], "answer": [row.get("answer", "")], "predicted_answer": [response_text], "confidence": [self.extract_confidence(response_text)], "accuracy": [grade_letter == "A"]})
-                print(new_row)
+                print(new_row.to_dict())
                 self.ece_df = pandas.concat([self.ece_df, new_row], ignore_index=True)
 
                 # Metrics based on grading response
