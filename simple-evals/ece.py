@@ -19,7 +19,7 @@ def ece_equal_width(df: pandas.DataFrame, num_bins=10) -> float:
     ece = sum(bin_stats["bin_weighted_ece"])
     agg_row = pandas.DataFrame({"confidence_bin": [""], "bin_accuracy": [""], "bin_confidence": [""], "bin_size": [df.shape[0]], "bin_weighted_ece": [ece]})
     bin_stats = pandas.concat([bin_stats, agg_row], ignore_index=True)
-    bin_stats.to_csv('simpleqa_equal_width_ece.csv', index=False)
+    bin_stats.to_csv('tmp/simpleqa_equal_width_ece.csv', index=False)
     print(f"Expected Calibration Error (ECE) (Equal-width): {ece:.4f}")
     return bin_stats
 
@@ -46,6 +46,6 @@ def ece_equal_weight(df: pandas.DataFrame, num_bins=10):
     ece = sum(bin_stats["bin_weighted_ece"])
     agg_row = pandas.DataFrame({"confidence_bin": [""], "bin_accuracy": [""], "bin_confidence": [""], "bin_size": [df.shape[0]], "bin_weighted_ece": [ece]})
     bin_stats = pandas.concat([bin_stats, agg_row], ignore_index=True)
-    bin_stats.to_csv('simpleqa_equal_weight_ece.csv', index=False)
+    bin_stats.to_csv('tmp/simpleqa_equal_weight_ece.csv', index=False)
     print(f"Expected Calibration Error (ECE) (Equal-weighted): {ece:.4f}")
     return bin_stats

@@ -212,7 +212,7 @@ class SimpleQAEval(Eval):
             
             print(f"Accuracy Given Attempted: {output_d['accuracy_given_attempted']:.3f}")
             print(f"F1 Score: {output_d['f1']:.3f}")
-            self.ece_df.to_csv("simpleqa.csv")
+            self.ece_df.to_csv("tmp/simpleqa.csv")
             return common.aggregate_results(results)
     
 
