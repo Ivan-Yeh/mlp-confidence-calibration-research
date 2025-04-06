@@ -2,6 +2,14 @@
 
 This project is still being developed... 🔨
 
+# File Management
+- simple_evals_ext.py: an extension from simple_evals.py; add HF model support.
+
+
+# Extension to Simple Evals:
+- 
+
+
 # Language Model Evaluation Pipeline
 
 ## Huggingface Downloader Instructions
