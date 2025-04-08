@@ -170,7 +170,7 @@ def main():
             local_dir = snapshot_download(repo_id=args.model)
             model = LlamaForCausalLM.from_pretrained(local_dir, torch_dtype=torch.float16, low_cpu_mem_usage=True, device_map="auto")
             tokeniser = AutoTokenizer.from_pretrained(local_dir)
-            models = {args.model: HFSamplerTokeniser(model, tokeniser, args.model, max_new_tokens=20)}
+            models = {args.model: HFSamplerTokeniser(model, tokeniser, args.model, max_new_tokens=50)}
         else:
             models = {args.model: models[args.model]}
 

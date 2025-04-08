@@ -108,7 +108,7 @@ class MMLUEval(Eval):
             ]
 
             print(format_multichoice_question(row))
-            response_sample = [sampler(prompt_messages) for _ in range(10)]
+            response_sample = [sampler(prompt_messages) for _ in range(20)]
             confidence_methods: list[function] = [single_generation_confidence, 
                                                                       empirical_semantic_confidence, 
                                                                       likelihood_based_semantic_confidence, 
