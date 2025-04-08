@@ -2,21 +2,14 @@ import json
 import argparse
 import pandas as pd
 from . import common
-from .drop_eval import DropEval
-from .gpqa_eval import GPQAEval
-from .humaneval_eval import HumanEval
-from .math_eval import MathEval
-from .mgsm_eval import MGSMEval
 from .mmlu_eval import MMLUEval
-from .simpleqa_eval import SimpleQAEval
-
 from .sampler.hf_sampler import HFSampler
-
 import torch
 import transformers
 from huggingface_hub import snapshot_download, login
 import os
-
+from .verbalised_conf import vanilla_prompt, cot_prompt, self_probing_prompt, multi_step_prompt, top_k_prompt
+from .ece import ece_equal_width, ece_equal_weight
 
 def main():
     parser = argparse.ArgumentParser(
@@ -26,6 +19,8 @@ def main():
         "--list-models", action="store_true", help="List available models"
     )
     parser.add_argument("--model", type=str, help="Select a model by name")
+    parser.add_argument("--list-prompting", action="store_true", help="List available prompting strategies")
+    parser.add_argument("--prompting", type=str, help="Select a prompting strategy to calculate ECE")
     parser.add_argument("--debug", action="store_true", help="Run in debug mode")
     parser.add_argument(
         "--examples", type=int, help="Number of examples to use (overrides default)"
@@ -34,11 +29,18 @@ def main():
     args = parser.parse_args()
 
     models_ls = ["meta-llama/Llama-3.2-3B-Instruct", "meta-llama/Llama-3.1-8B-Instruct"]
+    prompting_ls = ["Vanilla", "CoT", "Self-Probing", "Multi-Step", "Top-K"]
 
     if args.list_models:
         print("Available models:")
         for model_name in models_ls:
             print(f" - {model_name}")
+        return
+    
+    if args.list_prompting:
+        print("Available prompting strategies: ")
+        for strategy in prompting_ls:
+            print(f" - {strategy}")
         return
 
     if args.model:
@@ -46,17 +48,31 @@ def main():
             print(f"Error: Model '{args.model}' not found.")
             return
         
-
-    login(token=os.environ["HF_TOKEN"])
+    if args.prompting:
+        if args.prompting not in prompting_ls:
+            print(f"Error: Prompting strategy '{args.prompting}' not found.")
+            return
+        
+    # login(token=os.environ["HF_TOKEN"])
+    with open('./api.json', 'r') as f:
+        key = json.load(f)["HF_TOKEN"]
+        login(token=key)
     local_dir = snapshot_download(repo_id=args.model)
     pipeline: transformers.pipeline = transformers.pipeline("text-generation", model=local_dir, device_map="auto", model_kwargs={"torch_dtype": torch.float16, "low_cpu_mem_usage": True})
     terminators = [pipeline.tokenizer.eos_token_id, pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")]
-    
-    models = {args.model: HFSampler(pipeline=pipeline, terminators=terminators, model="meta-llama/Llama-3.1-8B-Instruct", max_tokens=2048),}
 
-    grading_sampler = HFSampler(pipeline, terminators, model=args.model, max_tokens=2048)
-    equality_checker = HFSampler(pipeline, terminators, model=args.model, max_tokens=2048)
-    # ^^^ used for fuzzy matching, just for math
+    system_msg = None
+    match args.prompting:
+        case "Vanilla": system_msg = vanilla_prompt()
+        case "CoT": system_msg = cot_prompt()
+        case "Self-Probing": system_msg = self_probing_prompt()
+        case "Multi-Step": system_msg = multi_step_prompt()
+        case "Top-K": system_msg = top_k_prompt()
+
+    models = {args.model: HFSampler(pipeline=pipeline, terminators=terminators, model=args.model, system_message=system_msg, max_tokens=2048),}
+
+    # grading_sampler = HFSampler(pipeline, terminators, model=args.model, system_message=system_msg, max_tokens=2048)
+    # equality_checker = HFSampler(pipeline, terminators, model=args.model, system_message=system_msg, max_tokens=2048)
 
     def get_evals(eval_name, debug_mode):
         num_examples = (
@@ -66,33 +82,7 @@ def main():
         match eval_name:
             case "mmlu":
                 return MMLUEval(num_examples=1 if debug_mode else num_examples)
-            case "math":
-                return MathEval(
-                    equality_checker=equality_checker,
-                    num_examples=num_examples,
-                    n_repeats=1 if debug_mode else 10,
-                )
-            case "gpqa":
-                return GPQAEval(
-                    n_repeats=1 if debug_mode else 10, num_examples=num_examples
-                )
-            case "mgsm":
-                return MGSMEval(num_examples_per_lang=10 if debug_mode else 250)
-            case "drop":
-                return DropEval(
-                    num_examples=10 if debug_mode else num_examples,
-                    train_samples_per_prompt=3,
-                )
-            case "humaneval":
-                return HumanEval(num_examples=10 if debug_mode else num_examples)
-            case "simpleqa":
-                return SimpleQAEval(
-                    grader_model=grading_sampler,
-                    num_examples=10 if debug_mode else num_examples,
-                )
-            case _:
-                raise Exception(f"Unrecognized eval type: {eval_name}")
-
+            
     evals = {
         eval_name: get_evals(eval_name, args.debug)
         # for eval_name in ["simpleqa"]
@@ -118,6 +108,7 @@ def main():
                 f.write(json.dumps(metrics, indent=2))
             print(f"Writing results to {result_filename}")
             mergekey2resultpath[f"{file_stem}"] = result_filename
+
     merge_metrics = []
     for eval_model_name, result_filename in mergekey2resultpath.items():
         try:
@@ -137,7 +128,6 @@ def main():
     print("\nAll results: ")
     print(merge_metrics_df.to_markdown())
     return merge_metrics
-
 
 if __name__ == "__main__":
     main()
