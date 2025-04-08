@@ -235,7 +235,7 @@ def main():
         for eval_name, eval_obj in evals.items():
             result = eval_obj(sampler)
             # ^^^ how to use a sampler
-            file_stem = f"{eval_name}_{model_name}"
+            file_stem = f"{eval_name}_{model_name.split("/")[-1]}"
             report_filename = f"/tmp/{file_stem}{debug_suffix}.html"
             print(f"Writing report to {report_filename}")
             with open(report_filename, "w") as fh:
@@ -258,7 +258,7 @@ def main():
         eval_name = eval_model_name[: eval_model_name.find("_")]
         model_name = eval_model_name[eval_model_name.find("_") + 1 :]
         merge_metrics.append(
-            {"eval_name": eval_name, "model_name": model_name, "metric": result}
+            {"eval_name": eval_name, "model_name": model_name.split("/")[-1], "metric": result}
         )
     merge_metrics_df = pd.DataFrame(merge_metrics).pivot(
         index=["model_name"], columns="eval_name"

@@ -175,6 +175,7 @@ class MMLUEval(Eval):
         print("TEST RESULTS") 
         for i, name in enumerate(["SGC", "ESC", "LSC", "MLSC", "BSC"]):
             print("Accuracy", name, self.ece_dfs[i]["accuracy"].mean())
+            self.ece_dfs[i].to_csv(f"tmp/ece_{name}.csv", index=False)
         print("##################")
         print()
         for i, name in enumerate(["SGC", "ESC", "LSC", "MLSC", "BSC"]):
