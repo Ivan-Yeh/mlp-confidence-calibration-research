@@ -103,7 +103,7 @@ class MMLUEval(Eval):
         def fn(row: dict):
             prompt_messages = [
                 sampler._pack_message(
-                    content=format_multichoice_question(row) + " Respond starting with the word 'Answer:' followed by only one of ABCD", role="user"
+                    content=format_multichoice_question(row) + " Respond starting with the word 'Answer:' followed by only one of ABCD and the option", role="user"
                 )
             ]
 
@@ -115,7 +115,7 @@ class MMLUEval(Eval):
                                                                       mean_likelihood_based_semantic_confidence, 
                                                                       bayesian_semantic_confidence]
             model_name="all-MiniLM-L6-v2"
-            distance_threshold = 0.3
+            distance_threshold = 0.15
             lnll_lst = [(x)[1] for x in response_sample]
             response_list = [x[0] for x in response_sample]
             embeddings = SentenceTransformer(model_name).encode(response_list)
