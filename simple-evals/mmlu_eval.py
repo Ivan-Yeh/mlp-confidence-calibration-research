@@ -103,7 +103,7 @@ class MMLUEval(Eval):
         def fn(row: dict):
             prompt_messages = [
                 sampler._pack_message(
-                    content=format_multichoice_question(row), role="user"
+                    content=format_multichoice_question(row) + " Respond starting with the word 'Answer:' followed by only one of ABCD", role="user"
                 )
             ]
 
