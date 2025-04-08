@@ -1,7 +1,7 @@
 import pandas
 import numpy as np
 
-def ece_equal_width(df: pandas.DataFrame, num_bins=10) -> float:
+def ece_equal_width(df: pandas.DataFrame, num_bins=10, file_path = "tmp/equal_width_ece.csv") -> float:
 
     # Create bins (0-100 split into 10 equal-width bins)
     bins = np.linspace(0, 1, num_bins + 1)
@@ -19,12 +19,12 @@ def ece_equal_width(df: pandas.DataFrame, num_bins=10) -> float:
     ece = sum(bin_stats["bin_weighted_ece"])
     agg_row = pandas.DataFrame({"confidence_bin": [""], "bin_accuracy": [""], "bin_confidence": [""], "bin_size": [df.shape[0]], "bin_weighted_ece": [ece]})
     bin_stats = pandas.concat([bin_stats, agg_row], ignore_index=True)
-    bin_stats.to_csv('tmp/simpleqa_equal_width_ece.csv', index=False)
+    bin_stats.to_csv(file_path, index=False)
     print(f"Expected Calibration Error (ECE) (Equal-width): {ece:.4f}")
     return bin_stats
 
 
-def ece_equal_weight(df: pandas.DataFrame, num_bins=10):
+def ece_equal_weight(df: pandas.DataFrame, num_bins=10, file_path = "tmp/equal_weight_ece.csv"):
     if num_bins > len(df):
         num_bins = int(len(df) / 2)
 
@@ -46,6 +46,6 @@ def ece_equal_weight(df: pandas.DataFrame, num_bins=10):
     ece = sum(bin_stats["bin_weighted_ece"])
     agg_row = pandas.DataFrame({"confidence_bin": [""], "bin_accuracy": [""], "bin_confidence": [""], "bin_size": [df.shape[0]], "bin_weighted_ece": [ece]})
     bin_stats = pandas.concat([bin_stats, agg_row], ignore_index=True)
-    bin_stats.to_csv('tmp/simpleqa_equal_weight_ece.csv', index=False)
+    bin_stats.to_csv(file_path, index=False)
     print(f"Expected Calibration Error (ECE) (Equal-weighted): {ece:.4f}")
     return bin_stats

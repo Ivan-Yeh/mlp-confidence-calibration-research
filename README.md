@@ -18,6 +18,19 @@ To download a model from Huggingface, run:
 
 `python3 hf_downloader.py [Huggingface token] [Huggingface model id]`
 
+
+## MMLU
+
+`python -m simple-evals.simple_evals_ext --list-tests`
+
+`python -m simple-evals.simple_evals_ext --list-models`
+
+`python -m simple-evals.simple_evals_ext --list-confidence`
+
+`python -m simple-evals.simple_evals_ext --model meta-llama/Llama-3.2-3B-Instruct --test mmlu --confidence logits --examples 3`
+
+
+
 ## Simple QA
 
 ### Setup

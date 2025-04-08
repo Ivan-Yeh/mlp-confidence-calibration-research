@@ -9,16 +9,17 @@ from .math_eval import MathEval
 from .mgsm_eval import MGSMEval
 from .mmlu_eval import MMLUEval
 from .simpleqa_eval import SimpleQAEval
-from .sampler.chat_completion_sampler import (
-    OPENAI_SYSTEM_MESSAGE_API,
-    OPENAI_SYSTEM_MESSAGE_CHATGPT,
-    ChatCompletionSampler,
-)
-from .sampler.o_chat_completion_sampler import OChatCompletionSampler
-from .sampler.claude_sampler import ClaudeCompletionSampler, CLAUDE_SYSTEM_MESSAGE_LMSYS
+# from .sampler.chat_completion_sampler import (
+#     OPENAI_SYSTEM_MESSAGE_API,
+#     OPENAI_SYSTEM_MESSAGE_CHATGPT,
+#     ChatCompletionSampler,
+# )
+# from .sampler.o_chat_completion_sampler import OChatCompletionSampler
+# from .sampler.claude_sampler import ClaudeCompletionSampler, CLAUDE_SYSTEM_MESSAGE_LMSYS
 
 # HF Extension:
-from .sampler.hf_sampler import HFSampler
+from .sampler.hf_sampler import HFSamplerPipeline, HFSamplerTokeniser
+from transformers import LlamaForCausalLM, AutoTokenizer
 import torch
 import transformers
 from huggingface_hub import snapshot_download, login
@@ -49,70 +50,70 @@ def main():
 
     models = {
         # chatgpt models:
-        "gpt-4o-2024-11-20_assistant": ChatCompletionSampler(
-            model="gpt-4o-2024-11-20",
-            system_message=OPENAI_SYSTEM_MESSAGE_API,
-            max_tokens=2048,
-        ),
-        "gpt-4o-2024-11-20_chatgpt": ChatCompletionSampler(
-            model="gpt-4o-2024-11-20",
-            system_message=OPENAI_SYSTEM_MESSAGE_CHATGPT,
-            max_tokens=2048,
-        ),
-        "o1": OChatCompletionSampler(
-            model="o1",
-        ),
-        "o1-preview": OChatCompletionSampler(
-            model="o1-preview",
-        ),
-        "o1-mini": OChatCompletionSampler(
-            model="o1-mini",
-        ),
-        # Default == Medium
-        "o3-mini": OChatCompletionSampler(
-            model="o3-mini",
-        ),
-        "o3-mini_high": OChatCompletionSampler(
-            model="o3-mini",
-            reasoning_effort="high",
-        ),
-        "o3-mini_low": OChatCompletionSampler(
-            model="o3-mini",
-            reasoning_effort="low",
-        ),
-        "gpt-4-turbo-2024-04-09_assistant": ChatCompletionSampler(
-            model="gpt-4-turbo-2024-04-09",
-            system_message=OPENAI_SYSTEM_MESSAGE_API,
-        ),
-        "gpt-4-turbo-2024-04-09_chatgpt": ChatCompletionSampler(
-            model="gpt-4-turbo-2024-04-09",
-            system_message=OPENAI_SYSTEM_MESSAGE_CHATGPT,
-        ),
-        "gpt-4o_assistant": ChatCompletionSampler(
-            model="gpt-4o",
-            system_message=OPENAI_SYSTEM_MESSAGE_API,
-            max_tokens=2048,
-        ),
-        "gpt-4o_chatgpt": ChatCompletionSampler(
-            model="gpt-4o",
-            system_message=OPENAI_SYSTEM_MESSAGE_CHATGPT,
-            max_tokens=2048,
-        ),
-        "gpt-4o-mini-2024-07-18": ChatCompletionSampler(
-            model="gpt-4o-mini-2024-07-18",
-            system_message=OPENAI_SYSTEM_MESSAGE_API,
-            max_tokens=2048,
-        ),
-        "gpt-4.5-preview-2025-02-27": ChatCompletionSampler(
-            model="gpt-4.5-preview-2025-02-27",
-            system_message=OPENAI_SYSTEM_MESSAGE_API,
-            max_tokens=2048,
-        ), 
-        # claude models:
-        "claude-3-opus-20240229_empty": ClaudeCompletionSampler(
-            model="claude-3-opus-20240229",
-            system_message=CLAUDE_SYSTEM_MESSAGE_LMSYS,
-        ),
+        # "gpt-4o-2024-11-20_assistant": ChatCompletionSampler(
+        #     model="gpt-4o-2024-11-20",
+        #     system_message=OPENAI_SYSTEM_MESSAGE_API,
+        #     max_tokens=2048,
+        # ),
+        # "gpt-4o-2024-11-20_chatgpt": ChatCompletionSampler(
+        #     model="gpt-4o-2024-11-20",
+        #     system_message=OPENAI_SYSTEM_MESSAGE_CHATGPT,
+        #     max_tokens=2048,
+        # ),
+        # "o1": OChatCompletionSampler(
+        #     model="o1",
+        # ),
+        # "o1-preview": OChatCompletionSampler(
+        #     model="o1-preview",
+        # ),
+        # "o1-mini": OChatCompletionSampler(
+        #     model="o1-mini",
+        # ),
+        # # Default == Medium
+        # "o3-mini": OChatCompletionSampler(
+        #     model="o3-mini",
+        # ),
+        # "o3-mini_high": OChatCompletionSampler(
+        #     model="o3-mini",
+        #     reasoning_effort="high",
+        # ),
+        # "o3-mini_low": OChatCompletionSampler(
+        #     model="o3-mini",
+        #     reasoning_effort="low",
+        # ),
+        # "gpt-4-turbo-2024-04-09_assistant": ChatCompletionSampler(
+        #     model="gpt-4-turbo-2024-04-09",
+        #     system_message=OPENAI_SYSTEM_MESSAGE_API,
+        # ),
+        # "gpt-4-turbo-2024-04-09_chatgpt": ChatCompletionSampler(
+        #     model="gpt-4-turbo-2024-04-09",
+        #     system_message=OPENAI_SYSTEM_MESSAGE_CHATGPT,
+        # ),
+        # "gpt-4o_assistant": ChatCompletionSampler(
+        #     model="gpt-4o",
+        #     system_message=OPENAI_SYSTEM_MESSAGE_API,
+        #     max_tokens=2048,
+        # ),
+        # "gpt-4o_chatgpt": ChatCompletionSampler(
+        #     model="gpt-4o",
+        #     system_message=OPENAI_SYSTEM_MESSAGE_CHATGPT,
+        #     max_tokens=2048,
+        # ),
+        # "gpt-4o-mini-2024-07-18": ChatCompletionSampler(
+        #     model="gpt-4o-mini-2024-07-18",
+        #     system_message=OPENAI_SYSTEM_MESSAGE_API,
+        #     max_tokens=2048,
+        # ),
+        # "gpt-4.5-preview-2025-02-27": ChatCompletionSampler(
+        #     model="gpt-4.5-preview-2025-02-27",
+        #     system_message=OPENAI_SYSTEM_MESSAGE_API,
+        #     max_tokens=2048,
+        # ), 
+        # # claude models:
+        # "claude-3-opus-20240229_empty": ClaudeCompletionSampler(
+        #     model="claude-3-opus-20240229",
+        #     system_message=CLAUDE_SYSTEM_MESSAGE_LMSYS,
+        # ),
         # HF models: None by default; only constructed when chosen
         "meta-llama/Llama-3.2-3B-Instruct": None,
         "meta-llama/Llama-3.1-8B-Instruct": None
@@ -126,6 +127,7 @@ def main():
         print("Available tests:")
         for r in tests:
             print(f" - {r}")
+        return
     if args.test:
         if args.test not in tests:
             print(f"Error: Test '{args.test}' not found.")
@@ -133,14 +135,15 @@ def main():
         else:
             tests = [args.test]
     else:
-        tests = ["simpleqa", "mmlu", "math", "gpqa", "mgsm", "drop", "humaneval"]
+        tests = ["mmlu"]
 
 
     confidence = ["verbalised", "logits"]
-    if args.confidence:
+    if args.list_confidence:
         print("Available confidence extraction methods:")
         for r in confidence:
             print(f" - {r}")
+        return
     if args.confidence:
         if args.confidence not in confidence:
             print(f"Error: Test '{args.confidence}' not found.")
@@ -148,14 +151,15 @@ def main():
         else:
             confidence = [args.confidence]
     else:
-        confidence = ["verbalised"]
+        confidence = ["logits"]
 
     
-    hf_models = [x for x in models.values() if x == None]
+    hf_models = [k for k, v in models.items() if v == None]
     if args.list_models:
         print("Available models:")
         for model_name in models.keys():
             print(f" - {model_name}")
+        return
     if args.model:
         if args.model not in models:
             print(f"Error: Model '{args.model}' not found.")
@@ -164,10 +168,9 @@ def main():
             # setup HF model
             login(token=os.environ["HF_TOKEN"])
             local_dir = snapshot_download(repo_id=args.model)
-            pipeline: transformers.pipeline = transformers.pipeline("text-generation", model=local_dir, device_map="auto", model_kwargs={"torch_dtype": torch.float16, "low_cpu_mem_usage": True})
-            terminators = [pipeline.tokenizer.eos_token_id, pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")]
-            
-            models = {args.model: HFSampler(pipeline=pipeline, terminators=terminators, model=args.model, max_tokens=2048),}
+            model = LlamaForCausalLM.from_pretrained(local_dir, torch_dtype=torch.float16, low_cpu_mem_usage=True, device_map="auto")
+            tokeniser = AutoTokenizer.from_pretrained(local_dir)
+            models = {args.model: HFSamplerTokeniser(model, tokeniser, args.model, max_new_tokens=20)}
         else:
             models = {args.model: models[args.model]}
 
@@ -176,8 +179,14 @@ def main():
     # ^^^ used for fuzzy matching, just for math
 
     # Use HF models for grading and equality checking instead
-    grading_sampler = HFSampler(pipeline, terminators, model=args.model, max_tokens=2048)
-    equality_checker = HFSampler(pipeline, terminators, model=args.model, max_tokens=2048)
+    try:
+        if local_dir: pass
+    except:
+        local_dir = snapshot_download(repo_id="meta-llama/Llama-3.2-3B-Instruct")
+    pipeline: transformers.pipeline = transformers.pipeline("text-generation", model=local_dir, model_kwargs={"torch_dtype": torch.float16, "low_cpu_mem_usage": True})
+    terminators = [pipeline.tokenizer.eos_token_id, pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")]
+    grading_sampler = HFSamplerPipeline(pipeline, terminators, model=args.model, max_tokens=1024)
+    equality_checker = HFSamplerPipeline(pipeline, terminators, model=args.model, max_tokens=1024)
 
     def get_evals(eval_name, debug_mode):
         num_examples = (

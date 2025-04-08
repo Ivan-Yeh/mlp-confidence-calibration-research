@@ -20,6 +20,11 @@ from .common import (
 )
 from .types import Eval, EvalResult, SamplerBase, SingleEvalResult
 
+from .ece import ece_equal_width, ece_equal_weight
+from sentence_transformers import SentenceTransformer
+from sklearn.cluster import AgglomerativeClustering
+from .semantic_confidence import single_generation_confidence, empirical_semantic_confidence, likelihood_based_semantic_confidence, mean_likelihood_based_semantic_confidence, bayesian_semantic_confidence
+
 subject2category = {
     "abstract_algebra": "stem",
     "anatomy": "other",
@@ -92,6 +97,7 @@ class MMLUEval(Eval):
         if num_examples:
             examples = random.Random(0).sample(examples, num_examples)
         self.examples = examples
+        self.ece_dfs: list[pandas.DataFrame] = [pandas.DataFrame(columns=['question', 'answer', 'predicted_answer', 'confidence', 'accuracy'])] * 5
 
     def __call__(self, sampler: SamplerBase) -> EvalResult:
         def fn(row: dict):
@@ -100,7 +106,45 @@ class MMLUEval(Eval):
                     content=format_multichoice_question(row), role="user"
                 )
             ]
-            response_text = normalize_response(sampler(prompt_messages))
+
+            print(format_multichoice_question(row))
+            response_sample = [sampler(prompt_messages) for _ in range(10)]
+            confidence_methods: list[function] = [single_generation_confidence, 
+                                                                      empirical_semantic_confidence, 
+                                                                      likelihood_based_semantic_confidence, 
+                                                                      mean_likelihood_based_semantic_confidence, 
+                                                                      bayesian_semantic_confidence]
+            model_name="all-MiniLM-L6-v2"
+            distance_threshold = 0.3
+            lnll_lst = [(x)[1] for x in response_sample]
+            response_list = [x[0] for x in response_sample]
+            embeddings = SentenceTransformer(model_name).encode(response_list)
+            clustering = AgglomerativeClustering(n_clusters=None, distance_threshold=distance_threshold, metric="cosine", linkage="average")
+            labels = clustering.fit_predict(embeddings)
+
+            for i, method in enumerate(confidence_methods):
+                response_text, confidence = method(lnll_lst, response_list, labels)
+                
+                response_text = normalize_response(response_text)
+                extracted_answer = None
+                for answer_regex in MULTILINGUAL_ANSWER_REGEXES:
+                    regex = MULTILINGUAL_ANSWER_PATTERN_TEMPLATE.format(answer_regex)
+                    match = re.search(regex, response_text)
+                    if match:
+                        extracted_answer = normalize_extracted_answer(match.group(1))
+                        break
+                score = 1.0 if extracted_answer == row["Answer"] else 0.0
+
+                new_row = pandas.DataFrame({"question": [format_multichoice_question(row)], 
+                                            "answer": [row["Answer"]], 
+                                            "predicted_answer": [extracted_answer], 
+                                            "confidence": [confidence], 
+                                            "accuracy": [score]})
+                self.ece_dfs[i] = pandas.concat([self.ece_dfs[i], new_row], ignore_index=True)
+            
+            
+            response_text, confidence = bayesian_semantic_confidence(lnll_lst, response_list, labels)
+            response_text = normalize_response(response_text)
             extracted_answer = None
             for answer_regex in MULTILINGUAL_ANSWER_REGEXES:
                 regex = MULTILINGUAL_ANSWER_PATTERN_TEMPLATE.format(answer_regex)
@@ -121,6 +165,21 @@ class MMLUEval(Eval):
             return SingleEvalResult(
                 html=html, score=score, metrics={category: score}, convo=convo
             )
-
+        
         results = common.map_with_progress(fn, self.examples)
+
+        print(self.ece_dfs)
+        print("##################")
+        print("TEST RESULTS") 
+        for i, name in enumerate(["SGC", "ESC", "LSC", "MLSC", "BSC"]):
+            print("Accuracy", name, self.ece_dfs[i]["accuracy"].mean())
+        print("##################")
+        print()
+        for i, name in enumerate(["SGC", "ESC", "LSC", "MLSC", "BSC"]):
+            print("EQUAL WEIGHT ECE", name)
+            print(ece_equal_weight(self.ece_dfs[i], file_path=f"tmp/equal_weight_ece_{name}.csv"))
+            print("EQUAL WIDTH ECE", name)
+            print(ece_equal_width(self.ece_dfs[i], file_path=f"tmp/equal_width_ece_{name}.csv"))
+            print("##################")
+            print()
         return common.aggregate_results(results)

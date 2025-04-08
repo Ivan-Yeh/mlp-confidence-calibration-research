@@ -10,7 +10,7 @@ from .mgsm_eval import MGSMEval
 from .mmlu_eval import MMLUEval
 from .simpleqa_eval import SimpleQAEval
 
-from .sampler.hf_sampler import HFSampler
+from .sampler.hf_sampler import HFSamplerPipeline, HFSamplerTokeniser
 
 import torch
 import transformers
