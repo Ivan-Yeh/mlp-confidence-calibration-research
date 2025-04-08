@@ -26,7 +26,7 @@ def ece_equal_width(df: pandas.DataFrame, num_bins=10, file_path = "tmp/equal_wi
 
 def ece_equal_weight(df: pandas.DataFrame, num_bins=10, file_path = "tmp/equal_weight_ece.csv"):
     if num_bins > len(df):
-        num_bins = int(len(df) / 2)
+        num_bins = max(int(len(df) / 2), 1)
 
     # Sort the DataFrame by confidence
     df_sorted = df.sort_values(by='confidence')
