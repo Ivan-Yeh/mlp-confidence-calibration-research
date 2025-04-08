@@ -126,6 +126,7 @@ class MMLUEval(Eval):
                 response_text, confidence = method(lnll_lst, response_list, labels)
                 
                 response_text = normalize_response(response_text)
+                print(response_text)
                 extracted_answer = None
                 for answer_regex in MULTILINGUAL_ANSWER_REGEXES:
                     regex = MULTILINGUAL_ANSWER_PATTERN_TEMPLATE.format(answer_regex)
@@ -140,6 +141,7 @@ class MMLUEval(Eval):
                                             "predicted_answer": [extracted_answer], 
                                             "confidence": [confidence], 
                                             "accuracy": [score]})
+                print(extracted_answer)
                 self.ece_dfs[i] = pandas.concat([self.ece_dfs[i], new_row], ignore_index=True)
             
             
