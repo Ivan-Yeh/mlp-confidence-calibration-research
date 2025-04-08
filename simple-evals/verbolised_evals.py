@@ -9,7 +9,6 @@ import transformers
 from huggingface_hub import snapshot_download, login
 import os
 from .verbalised_conf import vanilla_prompt, cot_prompt, self_probing_prompt, multi_step_prompt, top_k_prompt
-from .ece import ece_equal_width, ece_equal_weight
 
 def main():
     parser = argparse.ArgumentParser(

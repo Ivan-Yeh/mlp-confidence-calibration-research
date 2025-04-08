@@ -19,6 +19,8 @@ from .common import (
     normalize_response,
 )
 from .types import Eval, EvalResult, SamplerBase, SingleEvalResult
+from .verbalised_conf import vanilla_confidence, cot_confidence, self_probing_confidence, multi_step_confidence, top_k_confidence
+from .ece import ece_equal_width, ece_equal_weight
 
 subject2category = {
     "abstract_algebra": "stem",
@@ -92,6 +94,7 @@ class MMLUEval(Eval):
         if num_examples:
             examples = random.Random(0).sample(examples, num_examples)
         self.examples = examples
+        self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['question', 'answer', 'predicted_answer', 'confidence', 'accuracy'])
 
     def __call__(self, sampler: SamplerBase) -> EvalResult:
         def fn(row: dict):
@@ -101,6 +104,14 @@ class MMLUEval(Eval):
                 )
             ]
             response_text = normalize_response(sampler(prompt_messages))
+            confidence = 0.0
+            match sampler.verbolised_prompting:
+                case "Vanilla": confidence = vanilla_confidence(response_text)
+                case "CoT": confidence = cot_confidence(response_text)
+                case "Self-Probing": confidence = self_probing_confidence(response_text)
+                case "Multi-Step": confidence = multi_step_confidence(response_text)
+                case "Top-K": confidence = top_k_confidence(response_text)
+
             extracted_answer = None
             for answer_regex in MULTILINGUAL_ANSWER_REGEXES:
                 regex = MULTILINGUAL_ANSWER_PATTERN_TEMPLATE.format(answer_regex)
@@ -109,6 +120,11 @@ class MMLUEval(Eval):
                     extracted_answer = normalize_extracted_answer(match.group(1))
                     break
             score = 1.0 if extracted_answer == row["Answer"] else 0.0
+
+            new_row = pandas.DataFrame({"question": [row.get("problem", "")], "answer": [row.get("answer", "")], "predicted_answer": [response_text], "confidence": [confidence], "accuracy": [score]})
+            print(new_row.to_dict())
+            self.ece_df = pandas.concat([self.ece_df, new_row], ignore_index=True)
+
             html = common.jinja_env.from_string(HTML_JINJA).render(
                 prompt_messages=prompt_messages,
                 next_message=dict(content=response_text, role="assistant"),
@@ -121,6 +137,12 @@ class MMLUEval(Eval):
             return SingleEvalResult(
                 html=html, score=score, metrics={category: score}, convo=convo
             )
+        
+        # Calculate ECE
+        print(ece_equal_weight(self.ece_df))
+        print(ece_equal_width(self.ece_df))
+
+        self.ece_df.to_csv("tmp/simpleqa.csv")
 
         results = common.map_with_progress(fn, self.examples)
         return common.aggregate_results(results)

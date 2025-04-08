@@ -18,6 +18,7 @@ class HFSampler(SamplerBase):
         terminators, 
         model: str = "HG Model",
         system_message: str | None = None,
+        verbolised_prompting: str | None = None,
         temperature: float = 0.5,
         max_tokens: int = 2048):
 
@@ -25,6 +26,7 @@ class HFSampler(SamplerBase):
         self.terminators = terminators
         self.model = model
         self.system_message = system_message
+        self.verbolised_prompting = verbolised_prompting
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.image_format = "url"
