@@ -178,16 +178,6 @@ def main():
     # equality_checker = ChatCompletionSampler(model="gpt-4-turbo-preview")
     # ^^^ used for fuzzy matching, just for math
 
-    # Use HF models for grading and equality checking instead
-    try:
-        if local_dir: pass
-    except:
-        local_dir = snapshot_download(repo_id="meta-llama/Llama-3.2-3B-Instruct")
-    pipeline: transformers.pipeline = transformers.pipeline("text-generation", model=local_dir, model_kwargs={"torch_dtype": torch.float16, "low_cpu_mem_usage": True})
-    terminators = [pipeline.tokenizer.eos_token_id, pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")]
-    grading_sampler = HFSamplerPipeline(pipeline, terminators, model=args.model, max_tokens=1024)
-    equality_checker = HFSamplerPipeline(pipeline, terminators, model=args.model, max_tokens=1024)
-
     def get_evals(eval_name, debug_mode):
         num_examples = (
             args.examples if args.examples is not None else (5 if debug_mode else None)
@@ -197,6 +187,9 @@ def main():
             case "mmlu":
                 return MMLUEval(num_examples=1 if debug_mode else num_examples)
             case "math":
+                pipeline: transformers.pipeline = transformers.pipeline("text-generation", model=local_dir, model_kwargs={"torch_dtype": torch.float16, "low_cpu_mem_usage": True})
+                terminators = [pipeline.tokenizer.eos_token_id, pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")]
+                equality_checker = HFSamplerPipeline(pipeline, terminators, model=args.model, max_tokens=1024)
                 return MathEval(
                     equality_checker=equality_checker,
                     num_examples=num_examples,
@@ -216,6 +209,9 @@ def main():
             case "humaneval":
                 return HumanEval(num_examples=10 if debug_mode else num_examples)
             case "simpleqa":
+                pipeline: transformers.pipeline = transformers.pipeline("text-generation", model=local_dir, model_kwargs={"torch_dtype": torch.float16, "low_cpu_mem_usage": True})
+                terminators = [pipeline.tokenizer.eos_token_id, pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")]
+                grading_sampler = HFSamplerPipeline(pipeline, terminators, model=args.model, max_tokens=1024)
                 return SimpleQAEval(
                     grader_model=grading_sampler,
                     num_examples=10 if debug_mode else num_examples,

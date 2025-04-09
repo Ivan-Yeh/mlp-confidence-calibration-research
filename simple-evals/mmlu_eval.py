@@ -173,9 +173,11 @@ class MMLUEval(Eval):
         print(self.ece_dfs)
         print("##################")
         print("TEST RESULTS") 
-        for i, name in enumerate(["SGC", "ESC", "LSC", "MLSC", "BSC"]):
-            print("Accuracy", name, self.ece_dfs[i]["accuracy"].mean())
-            self.ece_dfs[i].to_csv(f"tmp/ece_{name}.csv", index=False)
+        with open("tmp/mmlu_results.txt", "w") as f:
+            for i, name in enumerate(["SGC", "ESC", "LSC", "MLSC", "BSC"]):
+                print("Accuracy", name, self.ece_dfs[i]["accuracy"].mean() ,file=f)
+                print("Accuracy", name, self.ece_dfs[i]["accuracy"].mean())
+                self.ece_dfs[i].to_csv(f"tmp/ece_{name}.csv", index=False)
         print("##################")
         print()
         for i, name in enumerate(["SGC", "ESC", "LSC", "MLSC", "BSC"]):
