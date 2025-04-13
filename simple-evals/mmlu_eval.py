@@ -109,9 +109,6 @@ class MMLUEval(Eval):
             match sampler.verbolised_prompting:
                 case "Vanilla": confidence = vanilla_confidence(response_text)
                 case "CoT": confidence = cot_confidence(response_text)
-                # case "Self-Probing": confidence = self_probing_confidence(response_text)
-                # case "Multi-Step": confidence = multi_step_confidence(response_text)
-                # case "Top-K": confidence = top_k_confidence(response_text)
 
             extracted_answer = None
             for answer_regex in MULTILINGUAL_ANSWER_REGEXES:

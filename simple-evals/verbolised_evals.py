@@ -65,9 +65,6 @@ def main():
     match args.prompting:
         case "Vanilla": system_msg = vanilla_prompt()
         case "CoT": system_msg = cot_prompt()
-        # case "Self-Probing": system_msg = self_probing_prompt()
-        # case "Multi-Step": system_msg = multi_step_prompt()
-        # case "Top-K": system_msg = top_k_prompt()
 
     models = {args.model: HFSampler(pipeline=pipeline, terminators=terminators, model=args.model, system_message=system_msg, max_tokens=2048),}
 
