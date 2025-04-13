@@ -104,6 +104,7 @@ class MMLUEval(Eval):
                 )
             ]
             response_text = normalize_response(sampler(prompt_messages))
+            print("Response:\n" ,response_text)
             confidence = 0.0
             match sampler.verbolised_prompting:
                 case "Vanilla": confidence = vanilla_confidence(response_text)
@@ -137,12 +138,13 @@ class MMLUEval(Eval):
             return SingleEvalResult(
                 html=html, score=score, metrics={category: score}, convo=convo
             )
-        
-        # Calculate ECE
-        print(ece_equal_weight(self.ece_df))
-        print(ece_equal_width(self.ece_df))
-
-        self.ece_df.to_csv("tmp/simpleqa.csv")
 
         results = common.map_with_progress(fn, self.examples)
+        
+         # Calculate ECE
+        ece_equal_weight(self.ece_df)
+        ece_equal_width(self.ece_df)
+
+        self.ece_df.to_csv("tmp/simpleqa.csv")
+        
         return common.aggregate_results(results)

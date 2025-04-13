@@ -9,7 +9,7 @@ import torch
 import transformers
 from huggingface_hub import snapshot_download, login
 import os
-from .verbalised_conf import vanilla_prompt, cot_prompt, self_probing_prompt, multi_step_prompt, top_k_prompt
+from .verbalised_conf import vanilla_prompt, cot_prompt
 
 def main():
     parser = argparse.ArgumentParser(
@@ -90,7 +90,7 @@ def main():
     evals = {
         eval_name: get_evals(eval_name, args.debug)
         # for eval_name in ["simpleqa"]
-        for eval_name in ["mmlu", "gpqa"]
+        for eval_name in ["mmlu"]
     }
     print(evals)
     debug_suffix = "_DEBUG" if args.debug else ""
@@ -103,7 +103,7 @@ def main():
             file_stem = f"{eval_name}_{model_name.split("/")[-1]}"
             report_filename = f"./tmp/{file_stem}{debug_suffix}.html"
             print(f"Writing report to {report_filename}")
-            with open(report_filename, "w") as fh:
+            with open(report_filename, "w", encoding="utf-8") as fh:
                 fh.write(common.make_report(result))
             metrics = result.metrics | {"score": result.score}
             print(metrics)
