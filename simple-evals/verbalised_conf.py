@@ -38,9 +38,9 @@ Now, please answer this question and provide your confidence level. Let’s thin
 # """
 
 def vanilla_confidence(response_text: str):
-    ans_and_conf = response_text.split(':')[-1].replace("%", "")
+    ans_and_conf = response_text.split('\n')[0].replace("%", "").replace(")", ":").replace(",", ":")
     try:
-        conf = ans_and_conf.split(',')[-1]
+        conf = ans_and_conf.split(':')[-1]
         return float(conf)/100
     except:
         return 0.0
