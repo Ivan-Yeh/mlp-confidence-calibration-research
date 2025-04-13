@@ -109,7 +109,7 @@ class MMLUEval(Eval):
                 case "Vanilla": confidence = vanilla_confidence(response_text)
                 case "CoT": confidence = cot_confidence(response_text)
 
-            extracted_answer = None
+            extracted_answer = ""
             for answer_regex in MULTILINGUAL_ANSWER_REGEXES:
                 regex = MULTILINGUAL_ANSWER_PATTERN_TEMPLATE.format(answer_regex)
                 match = re.search(regex, response_text)
