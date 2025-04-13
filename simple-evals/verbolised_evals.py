@@ -3,6 +3,7 @@ import argparse
 import pandas as pd
 from . import common
 from .mmlu_eval import MMLUEval
+from .gpqa_eval import GPQAEval
 from .sampler.hf_sampler import HFSampler
 import torch
 import transformers
@@ -64,9 +65,9 @@ def main():
     match args.prompting:
         case "Vanilla": system_msg = vanilla_prompt()
         case "CoT": system_msg = cot_prompt()
-        case "Self-Probing": system_msg = self_probing_prompt()
-        case "Multi-Step": system_msg = multi_step_prompt()
-        case "Top-K": system_msg = top_k_prompt()
+        # case "Self-Probing": system_msg = self_probing_prompt()
+        # case "Multi-Step": system_msg = multi_step_prompt()
+        # case "Top-K": system_msg = top_k_prompt()
 
     models = {args.model: HFSampler(pipeline=pipeline, terminators=terminators, model=args.model, system_message=system_msg, max_tokens=2048),}
 
@@ -81,11 +82,15 @@ def main():
         match eval_name:
             case "mmlu":
                 return MMLUEval(num_examples=1 if debug_mode else num_examples)
+            case "gpqa":
+                return GPQAEval(
+                    n_repeats=1 if debug_mode else 10, num_examples=num_examples
+                )
             
     evals = {
         eval_name: get_evals(eval_name, args.debug)
         # for eval_name in ["simpleqa"]
-        for eval_name in ["mmlu"]
+        for eval_name in ["mmlu", "gpqa"]
     }
     print(evals)
     debug_suffix = "_DEBUG" if args.debug else ""
