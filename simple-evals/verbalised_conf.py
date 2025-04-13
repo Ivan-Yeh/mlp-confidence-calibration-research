@@ -41,16 +41,26 @@ def vanilla_confidence(response_text: str):
     ans_and_conf = response_text.split('\n')[0].replace("%", "").replace(")", ":").replace(",", ":")
     try:
         conf = ans_and_conf.split(':')[-1]
-        return float(conf)/100
+        conf = float(conf)/100
+        if conf <= 1:
+            return conf
+        return 0.0
     except:
         return 0.0
 
 def cot_confidence(response_text: str):
-    ans_and_conf = response_text.split('\n')[-1].split(':')[-1].replace("%", "")
+    ans_and_conf = response_text.split('\n')[-1].split(':')[-1].strip(' ').replace("%", "").replace(',', ":").replace(')', ":").replace(' ', ':')
     try:
-         conf = ans_and_conf.split(',')[-1]
-         return float(conf)/100
+        conf = ans_and_conf.split(':')[-1]
+        conf = float(conf)/100
+        if conf <= 1:
+            return conf
+        return 0.0
     except:
+        if len(conf) > 1 and conf[1:].isnumeric() and conf[0].isalpha():
+            conf = float(conf[1:])/100
+            if conf <= 1:
+                return conf
         return 0.0
 
 # def self_probing_confidence(response_text: str):
