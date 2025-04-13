@@ -104,7 +104,6 @@ class MMLUEval(Eval):
                 )
             ]
             response_text = normalize_response(sampler(prompt_messages))
-            print("Response:\n" ,response_text)
             confidence = 0.0
             match sampler.verbolised_prompting:
                 case "Vanilla": confidence = vanilla_confidence(response_text)
@@ -120,10 +119,15 @@ class MMLUEval(Eval):
                 if match:
                     extracted_answer = normalize_extracted_answer(match.group(1))
                     break
+            if not extracted_answer: # 'Answer' is not given in the response
+                for line in response_text.split('\n'):
+                    answer_candidate = line.replace(':', ')').split(')')[0]
+                    if len(answer_candidate) == 1: #only one answer is provided in the response
+                        extracted_answer = answer_candidate
             score = 1.0 if extracted_answer == row["Answer"] else 0.0
 
-            new_row = pandas.DataFrame({"question": [row.get("problem", "")], "answer": [row.get("answer", "")], "predicted_answer": [response_text], "confidence": [confidence], "accuracy": [score]})
-            print(new_row.to_dict())
+            new_row = pandas.DataFrame({"question": [f"{row.get("Question")} A: {row.get("A")}, B: {row.get("B")}, C: {row.get("C")} D: {row.get("D")}"], 
+                "answer": [row.get("Answer")], "predicted_answer": [extracted_answer], "confidence": [confidence], "accuracy": [score]})
             self.ece_df = pandas.concat([self.ece_df, new_row], ignore_index=True)
 
             html = common.jinja_env.from_string(HTML_JINJA).render(
@@ -132,6 +136,7 @@ class MMLUEval(Eval):
                 score=score,
                 correct_answer=row["Answer"],
                 extracted_answer=extracted_answer,
+                confidence=confidence,
             )
             convo = prompt_messages + [dict(content=response_text, role="assistant")]
             category = subject2category.get(row["Subject"], "other")

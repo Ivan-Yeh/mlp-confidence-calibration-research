@@ -29,7 +29,7 @@ def main():
     args = parser.parse_args()
 
     models_ls = ["meta-llama/Llama-3.2-3B-Instruct", "meta-llama/Llama-3.1-8B-Instruct"]
-    prompting_ls = ["Vanilla", "CoT", "Self-Probing", "Multi-Step", "Top-K"]
+    prompting_ls = ["Vanilla", "CoT"]
 
     if args.list_models:
         print("Available models:")
@@ -69,7 +69,7 @@ def main():
         # case "Multi-Step": system_msg = multi_step_prompt()
         # case "Top-K": system_msg = top_k_prompt()
 
-    models = {args.model: HFSampler(pipeline=pipeline, terminators=terminators, model=args.model, system_message=system_msg, max_tokens=2048),}
+    models = {args.model: HFSampler(pipeline=pipeline, terminators=terminators, model=args.model, system_message=system_msg, verbolised_prompting=args.prompting, max_tokens=2048),}
 
     # grading_sampler = HFSampler(pipeline, terminators, model=args.model, system_message=system_msg, max_tokens=2048)
     # equality_checker = HFSampler(pipeline, terminators, model=args.model, system_message=system_msg, max_tokens=2048)
