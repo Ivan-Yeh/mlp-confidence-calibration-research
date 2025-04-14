@@ -172,11 +172,11 @@ def main():
             if confidence[0] in logits_sampler:
                 model = LlamaForCausalLM.from_pretrained(local_dir, torch_dtype=torch.float16, low_cpu_mem_usage=True, device_map="auto")
                 tokeniser = AutoTokenizer.from_pretrained(local_dir)
-                models = {args.model: HFSamplerTokeniser(model, tokeniser, args.model, max_new_tokens=50)}
+                models = {args.model: HFSamplerTokeniser(model=model, tokeniser=tokeniser, model_name=args.model, max_new_tokens=50)}
             else:
                 pipeline: transformers.pipeline = transformers.pipeline("text-generation", model=local_dir, model_kwargs={"torch_dtype": torch.float16, "low_cpu_mem_usage": True})
                 terminators = [pipeline.tokenizer.eos_token_id, pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")]
-                models = {args.model: HFSamplerPipeline(pipeline, terminators, args.model, max_tokens=256)}
+                models = {args.model: HFSamplerPipeline(pipeline=pipeline, terminators=terminators, model_name=args.model, max_tokens=256)}
         else:
             models = {args.model: models[args.model]}
 
@@ -195,7 +195,7 @@ def main():
             case "math":
                 pipeline: transformers.pipeline = transformers.pipeline("text-generation", model=local_dir, model_kwargs={"torch_dtype": torch.float16, "low_cpu_mem_usage": True})
                 terminators = [pipeline.tokenizer.eos_token_id, pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")]
-                equality_checker = HFSamplerPipeline(pipeline, terminators, model=args.model, max_tokens=1024)
+                equality_checker = HFSamplerPipeline(pipeline, terminators, model_name=args.model, max_tokens=1024)
                 return MathEval(
                     equality_checker=equality_checker,
                     num_examples=num_examples,
@@ -217,7 +217,7 @@ def main():
             case "simpleqa":
                 pipeline: transformers.pipeline = transformers.pipeline("text-generation", model=local_dir, model_kwargs={"torch_dtype": torch.float16, "low_cpu_mem_usage": True})
                 terminators = [pipeline.tokenizer.eos_token_id, pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")]
-                grading_sampler = HFSamplerPipeline(pipeline, terminators, model=args.model, max_tokens=1024)
+                grading_sampler = HFSamplerPipeline(pipeline, terminators, model_name=args.model, max_tokens=1024)
                 return SimpleQAEval(
                     grader_model=grading_sampler,
                     num_examples=10 if debug_mode else num_examples,

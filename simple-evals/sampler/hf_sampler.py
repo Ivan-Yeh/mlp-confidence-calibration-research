@@ -24,14 +24,14 @@ class HFSamplerPipeline(SamplerBase):
         self,
         pipeline,
         terminators, 
-        model: str = "HG Pipeline",
+        model_name: str = "HF Pipeline",
         system_message: str | None = None,
         temperature: float = 0.5,
         max_tokens: int = 2048):
 
         self.pipeline = pipeline
         self.terminators = terminators
-        self.model = model
+        self.model_name = model_name
         self.system_message = system_message
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -83,13 +83,14 @@ class HFSamplerTokeniser(SamplerBase):
         self,
         model: LlamaForCausalLM,
         tokeniser: AutoTokenizer, 
+        model_name: str = "HF Tokeniser",
         system_message: str | None = None,
         temperature: float = 0.5,
         max_new_tokens: int = 10):
 
         self.model = model
         self.tokeniser = tokeniser
-        self.model = model
+        self.model_name = model_name
         self.system_message = system_message
         self.temperature = temperature
         self.max_new_tokens = max_new_tokens
