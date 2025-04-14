@@ -6,20 +6,17 @@ https://arxiv.org/abs/2009.03300
 
 import random
 import re
+import time
 
 import pandas
 
 from . import common
 from .common import (
     HTML_JINJA,
-    MULTILINGUAL_ANSWER_PATTERN_TEMPLATE,
-    MULTILINGUAL_ANSWER_REGEXES,
-    format_multichoice_question,
-    normalize_extracted_answer,
-    normalize_response,
+    format_multichoice_question
 )
 from .types import Eval, EvalResult, SamplerBase, SingleEvalResult
-from .verbalised_conf import vanilla_confidence, cot_confidence
+from .confidence_extractor import vanilla_confidence, cot_confidence
 from .ece import ece_equal_width, ece_equal_weight
 
 subject2category = {
@@ -84,7 +81,7 @@ subject2category = {
 
 
 class MMLUEval(Eval):
-    def __init__(self, num_examples: int | None = None, language: str = "EN-US"):
+    def __init__(self, num_examples: int | None = None, language: str = "EN-US", confidence_type: str = "CoT"):
         if language != "EN-US":
             url = f"https://openaipublic.blob.core.windows.net/simple-evals/mmlu_{language}.csv"
         else:
@@ -94,7 +91,9 @@ class MMLUEval(Eval):
         if num_examples:
             examples = random.Random(0).sample(examples, num_examples)
         self.examples = examples
-        self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['question', 'answer', 'predicted_answer', 'confidence', 'accuracy'])
+        self.confidence_type = confidence_type
+        self.outputs: pandas.DataFrame = pandas.DataFrame(columns=['question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'score'])
+        self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'score'])
 
     def __call__(self, sampler: SamplerBase) -> EvalResult:
         def fn(row: dict):
@@ -103,29 +102,13 @@ class MMLUEval(Eval):
                     content=format_multichoice_question(row), role="user"
                 )
             ]
-            response_text = normalize_response(sampler(prompt_messages))
-            confidence = 0.0
-            match sampler.verbolised_prompting:
-                case "Vanilla": confidence = vanilla_confidence(response_text)
-                case "CoT": confidence = cot_confidence(response_text)
 
-            extracted_answer = ""
-            for answer_regex in MULTILINGUAL_ANSWER_REGEXES:
-                regex = MULTILINGUAL_ANSWER_PATTERN_TEMPLATE.format(answer_regex)
-                match = re.search(regex, response_text)
-                if match:
-                    extracted_answer = normalize_extracted_answer(match.group(1))
-                    break
-            if not extracted_answer: # 'Answer' is not given in the response
-                for line in response_text.split('\n'):
-                    answer_candidate = line.replace(':', ')').split(')')[0]
-                    if len(answer_candidate) == 1: #only one answer is provided in the response
-                        extracted_answer = answer_candidate
-            score = 1.0 if extracted_answer == row["Answer"] else 0.0
+            match self.confidence_type:
+                case "verbal-vanilla": response_text, extracted_answer, confidence, score, new_ece_row, new_output_row = vanilla_confidence(sampler, prompt_messages, row)
+                case "verbal-cot": response_text, extracted_answer, confidence, score, new_ece_row, new_output_row = cot_confidence(sampler, prompt_messages, row)
 
-            new_row = pandas.DataFrame({"question": [f"{row.get("Question")} A: {row.get("A")}, B: {row.get("B")}, C: {row.get("C")} D: {row.get("D")}"], 
-                "answer": [row.get("Answer")], "predicted_answer": [extracted_answer], "confidence": [confidence], "accuracy": [score]})
-            self.ece_df = pandas.concat([self.ece_df, new_row], ignore_index=True)
+            self.ece_df = pandas.concat([self.ece_df, new_ece_row], ignore_index=True)
+            self.outputs = pandas.concat([self.outputs, new_output_row], ignore_index=True)
 
             html = common.jinja_env.from_string(HTML_JINJA).render(
                 prompt_messages=prompt_messages,
@@ -147,6 +130,6 @@ class MMLUEval(Eval):
         ece_equal_weight(self.ece_df)
         ece_equal_width(self.ece_df)
 
-        self.ece_df.to_csv("tmp/simpleqa.csv")
+        self.outputs.to_csv(f"tmp/{sampler.model_name}_mmlu_{self.confidence_type}_outputs_{time.time()}.csv")
         
         return common.aggregate_results(results)

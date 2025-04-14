@@ -20,6 +20,7 @@ class GPQAEval(Eval):
         n_repeats: int = 4,
         variant: str = "diamond",
         num_examples: int | None = None,  # restrict to a subset of the data for debugging
+        confidence_type: str | None = None
     ):
         df = pandas.read_csv(
             f"https://openaipublic.blob.core.windows.net/simple-evals/gpqa_{variant}.csv"
@@ -32,6 +33,7 @@ class GPQAEval(Eval):
         examples = examples * n_repeats
         examples = [example | {"permutation": rng.sample(range(4), 4)} for example in examples]
         self.examples = examples
+        self.confidence_type = confidence_type
         self.n_repeats = n_repeats
 
     def __call__(self, sampler: SamplerBase) -> EvalResult:
@@ -53,9 +55,14 @@ class GPQAEval(Eval):
                     content=format_multichoice_question(choices_dict), role="user"
                 )
             ]
+
+
+            # ----------------------------------------------------------------------
             response_text = sampler(prompt_messages)
             match = re.search(ANSWER_PATTERN_MULTICHOICE, response_text)
             extracted_answer = match.group(1) if match else None
+            # ----------------------------------------------------------------------
+
             score = 1.0 if extracted_answer == correct_answer else 0.0
             html = common.jinja_env.from_string(HTML_JINJA).render(
                 prompt_messages=prompt_messages,
