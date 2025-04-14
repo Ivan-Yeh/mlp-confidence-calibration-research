@@ -16,7 +16,7 @@ from .common import (
     format_multichoice_question
 )
 from .types import Eval, EvalResult, SamplerBase, SingleEvalResult
-from .confidence_extractor import vanilla_confidence, cot_confidence
+from .confidence_extractor import mmlu_vanilla_confidence, mmlu_cot_confidence
 from .ece import ece_equal_width, ece_equal_weight
 
 subject2category = {
@@ -104,8 +104,8 @@ class MMLUEval(Eval):
             ]
 
             match self.confidence_type:
-                case "verbal-vanilla": response_text, extracted_answer, confidence, score, new_ece_row, new_output_row = vanilla_confidence(sampler, prompt_messages, row)
-                case "verbal-cot": response_text, extracted_answer, confidence, score, new_ece_row, new_output_row = cot_confidence(sampler, prompt_messages, row)
+                case "verbal-vanilla": response_text, extracted_answer, confidence, score, new_ece_row, new_output_row = mmlu_vanilla_confidence(sampler, prompt_messages, row)
+                case "verbal-cot": response_text, extracted_answer, confidence, score, new_ece_row, new_output_row = mmlu_cot_confidence(sampler, prompt_messages, row)
 
             self.ece_df = pandas.concat([self.ece_df, new_ece_row], ignore_index=True)
             self.outputs = pandas.concat([self.outputs, new_output_row], ignore_index=True)
@@ -126,7 +126,7 @@ class MMLUEval(Eval):
 
         results = common.map_with_progress(fn, self.examples)
         
-         # Calculate ECE
+        # Calculate ECE
         ece_equal_weight(self.ece_df)
         ece_equal_width(self.ece_df)
 

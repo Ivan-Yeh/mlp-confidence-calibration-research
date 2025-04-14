@@ -5,13 +5,15 @@ https://arxiv.org/abs/2311.12022
 """
 
 import random
-import re
+import time
 
 import pandas
 
 from . import common
 from .common import ANSWER_PATTERN_MULTICHOICE, HTML_JINJA, format_multichoice_question
 from .types import Eval, EvalResult, MessageList, SamplerBase, SingleEvalResult
+from .confidence_extractor import gpqa_vanilla_confidence, gpqa_cot_confidence
+from .ece import ece_equal_weight, ece_equal_width
 
 
 class GPQAEval(Eval):
@@ -35,6 +37,8 @@ class GPQAEval(Eval):
         self.examples = examples
         self.confidence_type = confidence_type
         self.n_repeats = n_repeats
+        self.outputs: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence'])
+        self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'score'])
 
     def __call__(self, sampler: SamplerBase) -> EvalResult:
         def fn(row: dict):
@@ -56,14 +60,13 @@ class GPQAEval(Eval):
                 )
             ]
 
+            match self.confidence_type:
+                case "verbal-vanilla": response_text, extracted_answer, confidence, score, new_ece_row, new_output_row = gpqa_vanilla_confidence(sampler, prompt_messages, row)
+                case "verbal-cot": response_text, extracted_answer, confidence, score, new_ece_row, new_output_row = gpqa_cot_confidence(sampler, prompt_messages, row)
 
-            # ----------------------------------------------------------------------
-            response_text = sampler(prompt_messages)
-            match = re.search(ANSWER_PATTERN_MULTICHOICE, response_text)
-            extracted_answer = match.group(1) if match else None
-            # ----------------------------------------------------------------------
+            self.ece_df = pandas.concat([self.ece_df, new_ece_row], ignore_index=True)
+            self.outputs = pandas.concat([self.outputs, new_output_row], ignore_index=True)
 
-            score = 1.0 if extracted_answer == correct_answer else 0.0
             html = common.jinja_env.from_string(HTML_JINJA).render(
                 prompt_messages=prompt_messages,
                 next_message=dict(content=response_text, role="assistant"),
@@ -77,4 +80,11 @@ class GPQAEval(Eval):
             )
 
         results = common.map_with_progress(fn, self.examples)
+
+        # Calculate ECE
+        ece_equal_weight(self.ece_df)
+        ece_equal_width(self.ece_df)
+
+        self.outputs.to_csv(f"tmp/{sampler.model_name.split('/')[-1]}_gpqa_{self.confidence_type}_outputs_{time.time()}.csv")
+
         return common.aggregate_results(results)
