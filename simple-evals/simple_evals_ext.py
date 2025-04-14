@@ -137,8 +137,9 @@ def main():
     else:
         tests = ["mmlu"]
 
-
-    confidence = ["verbal-cot", "verbal-vanilla", "empirical-semantic", "single-generation"]
+    verbal_sampler = ["verbal-cot", "verbal-vanilla"]
+    logits_sampler = ["empirical-semantic", "single-generation"]
+    confidence = verbal_sampler + logits_sampler
     if args.list_confidence:
         print("Available confidence extraction methods:")
         for r in confidence:
@@ -151,7 +152,7 @@ def main():
         else:
             confidence = [args.confidence]
     else:
-        confidence = ["logits"]
+        confidence = ["single-generation"]
 
     
     hf_models = [k for k, v in models.items() if v == None]
@@ -168,9 +169,14 @@ def main():
             # setup HF model
             login(token=os.environ["HF_TOKEN"])
             local_dir = snapshot_download(repo_id=args.model)
-            model = LlamaForCausalLM.from_pretrained(local_dir, torch_dtype=torch.float16, low_cpu_mem_usage=True, device_map="auto")
-            tokeniser = AutoTokenizer.from_pretrained(local_dir)
-            models = {args.model: HFSamplerTokeniser(model, tokeniser, args.model, max_new_tokens=50)}
+            if confidence[0] in logits_sampler:
+                model = LlamaForCausalLM.from_pretrained(local_dir, torch_dtype=torch.float16, low_cpu_mem_usage=True, device_map="auto")
+                tokeniser = AutoTokenizer.from_pretrained(local_dir)
+                models = {args.model: HFSamplerTokeniser(model, tokeniser, args.model, max_new_tokens=50)}
+            else:
+                pipeline: transformers.pipeline = transformers.pipeline("text-generation", model=local_dir, model_kwargs={"torch_dtype": torch.float16, "low_cpu_mem_usage": True})
+                terminators = [pipeline.tokenizer.eos_token_id, pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")]
+                models = {args.model: HFSamplerPipeline(pipeline, terminators, args.model, max_tokens=256)}
         else:
             models = {args.model: models[args.model]}
 
