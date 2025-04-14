@@ -179,7 +179,7 @@ def main():
             else:
                 pipeline: transformers.pipeline = transformers.pipeline("text-generation", model=local_dir, model_kwargs={"torch_dtype": torch.float16, "low_cpu_mem_usage": True})
                 terminators = [pipeline.tokenizer.eos_token_id, pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")]
-                models = {args.model: HFSamplerPipeline(pipeline, terminators, args.model, max_tokens=256)}
+                models = {args.model: HFSamplerPipeline(pipeline, terminators, args.model, max_tokens=1024)}
         else:
             models = {args.model: models[args.model]}
 

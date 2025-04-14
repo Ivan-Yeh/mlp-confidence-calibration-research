@@ -135,10 +135,10 @@ def gpqa_vanilla_confidence(sampler: HFSamplerPipeline, prompt_messages: str, ro
             if len(answer_candidate) == 1: #only one answer is provided in the response
                 extracted_answer = answer_candidate
 
-    score = 1.0 if extracted_answer == row["Answer"] else 0.0
+    score = 1.0 if extracted_answer == row["Correct Answer"] else 0.0
 
-    new_row = pandas.DataFrame({"prompt": [prompt_messages], "question": [format_multichoice_question(row)], 
-        "answer": [row.get("Answer")], "response_raw": [response_text], "response_extracted": [extracted_answer], "confidence": [confidence], "score": [score]})
+    new_row = pandas.DataFrame({"prompt": [prompt_messages], "question": [row["Question"]], 
+        "answer": [row.get("Correct Answer")], "response_raw": [response_text], "response_extracted": [extracted_answer], "confidence": [confidence], "score": [score]})
 
     return (response_text, extracted_answer, confidence, score, new_row, new_row)
 
@@ -169,9 +169,9 @@ def gpqa_cot_confidence(sampler: HFSamplerPipeline, prompt_messages: str, row) -
             if len(answer_candidate) == 1: #only one answer is provided in the response
                 extracted_answer = answer_candidate
 
-    score = 1.0 if extracted_answer == row["Answer"] else 0.0
+    score = 1.0 if extracted_answer == row["Correct Answer"] else 0.0
 
-    new_row = pandas.DataFrame({"prompt": [prompt_messages], "question": [format_multichoice_question(row)], 
-        "answer": [row.get("Answer")], "response_raw": [response_text], "response_extracted": [extracted_answer], "confidence": [confidence], "score": [score]})
+    new_row = pandas.DataFrame({"prompt": [prompt_messages], "question": [row["Question"]], 
+        "answer": [row.get("Correct Answer")], "response_raw": [response_text], "response_extracted": [extracted_answer], "confidence": [confidence], "score": [score]})
 
     return (response_text, extracted_answer, confidence, score, new_row, new_row)

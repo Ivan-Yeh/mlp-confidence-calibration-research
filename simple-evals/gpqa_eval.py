@@ -73,6 +73,7 @@ class GPQAEval(Eval):
                 score=score,
                 correct_answer=correct_answer,
                 extracted_answer=extracted_answer,
+                confidence=confidence,
             )
             convo = prompt_messages + [dict(content=response_text, role="assistant")]
             return SingleEvalResult(
