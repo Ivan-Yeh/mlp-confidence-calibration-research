@@ -87,7 +87,7 @@ def main():
     evals = {
         eval_name: get_evals(eval_name, args.debug)
         # for eval_name in ["simpleqa"]
-        for eval_name in ["gpqa"]
+        for eval_name in ["mmlu"]
     }
     print(evals)
     debug_suffix = "_DEBUG" if args.debug else ""

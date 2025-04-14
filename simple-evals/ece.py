@@ -11,7 +11,7 @@ def ece_equal_width(df: pandas.DataFrame, num_bins=10) -> float:
 
     # Group by bins and calculate mean accuracy and mean confidence
     bin_stats = df.groupby('confidence_bin').agg(
-        bin_accuracy=('accuracy', 'mean'),
+        bin_accuracy=('score', 'mean'),
         bin_confidence=('confidence', 'mean'),
         bin_size=('confidence', 'size')
     ).reset_index()
@@ -38,7 +38,7 @@ def ece_equal_weight(df: pandas.DataFrame, num_bins=10):
     
     # Group by bins and calculate mean accuracy, mean confidence, and bin size
     bin_stats = df_sorted.groupby('confidence_bin').agg(
-        bin_accuracy=('accuracy', 'mean'),
+        bin_accuracy=('score', 'mean'),
         bin_confidence=('confidence', 'mean'),
         bin_size=('confidence', 'size')  # Count the number of samples in each bin
     ).reset_index()

@@ -92,8 +92,8 @@ class MMLUEval(Eval):
             examples = random.Random(0).sample(examples, num_examples)
         self.examples = examples
         self.confidence_type = confidence_type
-        self.outputs: pandas.DataFrame = pandas.DataFrame(columns=['question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'score'])
-        self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'score'])
+        self.outputs: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence'])
+        self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'score'])
 
     def __call__(self, sampler: SamplerBase) -> EvalResult:
         def fn(row: dict):
@@ -130,6 +130,6 @@ class MMLUEval(Eval):
         ece_equal_weight(self.ece_df)
         ece_equal_width(self.ece_df)
 
-        self.outputs.to_csv(f"tmp/{sampler.model_name}_mmlu_{self.confidence_type}_outputs_{time.time()}.csv")
+        self.outputs.to_csv(f"tmp/{sampler.model_name.split('/')[-1]}_mmlu_{self.confidence_type}_outputs_{time.time()}.csv")
         
         return common.aggregate_results(results)

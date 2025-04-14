@@ -1,4 +1,4 @@
-from .sampler.hf_sampler import HFSampler
+from .sampler.hf_sampler import HFSamplerPipeline
 from .common import (
     MULTILINGUAL_ANSWER_PATTERN_TEMPLATE,
     MULTILINGUAL_ANSWER_REGEXES,
@@ -36,7 +36,7 @@ def regex_extract_reponse(response_text) -> str | None:
             break
     return extracted_answer
 
-def vanilla_confidence(sampler: HFSampler, prompt_messages: str, row) -> tuple:
+def vanilla_confidence(sampler: HFSamplerPipeline, prompt_messages: str, row) -> tuple:
     sampler.system_message = VANILLA_PROMPT
 
     response_text = normalize_response(sampler(prompt_messages))
@@ -66,13 +66,13 @@ def vanilla_confidence(sampler: HFSampler, prompt_messages: str, row) -> tuple:
 
     score = 1.0 if extracted_answer == row["Answer"] else 0.0
 
-    new_row = pandas.DataFrame({"question": [format_multichoice_question(row)], 
+    new_row = pandas.DataFrame({"prompt": [prompt_messages], "question": [format_multichoice_question(row)], 
         "answer": [row.get("Answer")], "response_raw": [response_text], "response_extracted": [extracted_answer], "confidence": [confidence], "score": [score]})
 
     return (response_text, extracted_answer, confidence, score, new_row, new_row)
     
 
-def cot_confidence(sampler: HFSampler, prompt_messages: str, row) -> tuple:
+def cot_confidence(sampler: HFSamplerPipeline, prompt_messages: str, row) -> tuple:
     sampler.system_message = COT_PROMPT
 
     response_text = normalize_response(sampler(prompt_messages))
@@ -89,6 +89,8 @@ def cot_confidence(sampler: HFSampler, prompt_messages: str, row) -> tuple:
             confidence = float(confidence[1:])/100
             if confidence > 1:
                 confidence = 0.0
+        else:
+            confidence = 0.0
 
     extracted_answer = None
     for answer_regex in MULTILINGUAL_ANSWER_REGEXES:
@@ -105,7 +107,7 @@ def cot_confidence(sampler: HFSampler, prompt_messages: str, row) -> tuple:
 
     score = 1.0 if extracted_answer == row["Answer"] else 0.0
 
-    new_row = pandas.DataFrame({"question": [format_multichoice_question(row)], 
+    new_row = pandas.DataFrame({"prompt": [prompt_messages], "question": [format_multichoice_question(row)], 
         "answer": [row.get("Answer")], "response_raw": [response_text], "response_extracted": [extracted_answer], "confidence": [confidence], "score": [score]})
 
     return (response_text, extracted_answer, confidence, score, new_row, new_row)
