@@ -138,7 +138,7 @@ def main():
         tests = ["mmlu"]
 
 
-    confidence = ["verbalised", "logits"]
+    confidence = ["verbal-cot", "verbal-vanilla", "empirical-semantic", "single-generation"]
     if args.list_confidence:
         print("Available confidence extraction methods:")
         for r in confidence:
@@ -185,7 +185,7 @@ def main():
         # Set num_examples = None to reproduce full evals
         match eval_name:
             case "mmlu":
-                return MMLUEval(num_examples=1 if debug_mode else num_examples)
+                return MMLUEval(num_examples=1 if debug_mode else num_examples, confidence_type=confidence)
             case "math":
                 pipeline: transformers.pipeline = transformers.pipeline("text-generation", model=local_dir, model_kwargs={"torch_dtype": torch.float16, "low_cpu_mem_usage": True})
                 terminators = [pipeline.tokenizer.eos_token_id, pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")]
