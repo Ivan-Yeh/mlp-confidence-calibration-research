@@ -18,7 +18,7 @@ from .simpleqa_eval import SimpleQAEval
 # from .sampler.claude_sampler import ClaudeCompletionSampler, CLAUDE_SYSTEM_MESSAGE_LMSYS
 
 # HF Extension:
-from .sampler.hf_sampler import HFSamplerPipeline, HFSamplerTokeniser
+from .sampler.other_samplers import *
 from transformers import LlamaForCausalLM, AutoTokenizer
 import torch
 import transformers
@@ -47,6 +47,9 @@ def main():
     )
 
     args = parser.parse_args()
+
+    with open("api.json", "r") as f:
+        DATABRICKS_TOKEN = json.load(f)["DATABRICKS_TOKEN"]
 
     models = {
         # chatgpt models:
@@ -115,6 +118,8 @@ def main():
         #     system_message=CLAUDE_SYSTEM_MESSAGE_LMSYS,
         # ),
         # HF models: None by default; only constructed when chosen
+        "databricks-meta-llama-3-3-70b-instruct": DBSampler(api_key=DATABRICKS_TOKEN, model_url="https://dbc-b04afa5d-8e3e.cloud.databricks.com/serving-endpoints", model_name="databricks-meta-llama-3-3-70b-instruct", max_tokens=128),
+        "databricks-claude-3-7-sonnet": DBSampler(api_key=DATABRICKS_TOKEN, model_url="https://dbc-b04afa5d-8e3e.cloud.databricks.com/serving-endpoints", model_name="databricks-claude-3-7-sonnet", max_tokens=128),
         "meta-llama/Llama-3.2-3B-Instruct": None,
         "meta-llama/Llama-3.1-8B-Instruct": None
     }
@@ -137,9 +142,7 @@ def main():
     else:
         tests = ["mmlu"]
 
-    verbal_sampler = ["verbal-cot", "verbal-vanilla"]
-    logits_sampler = ["empirical-semantic", "single-generation"]
-    confidence = verbal_sampler + logits_sampler
+    confidence = ["verbal-cot", "verbal-vanilla", "empirical-semantic", "single-generation"]
     if args.list_confidence:
         print("Available confidence extraction methods:")
         for r in confidence:
@@ -167,22 +170,22 @@ def main():
             return
         elif args.model in hf_models:
             # setup HF model
-            
             local_dir = snapshot_download(repo_id=args.model)
-            if confidence[0] in logits_sampler:
-                model = LlamaForCausalLM.from_pretrained(local_dir, torch_dtype=torch.float16, low_cpu_mem_usage=True)
-                tokeniser = AutoTokenizer.from_pretrained(local_dir)
-                models = {args.model: HFSamplerTokeniser(model=model, tokeniser=tokeniser, model_name=args.model, max_new_tokens=256)}
-            else:
-                pipeline: transformers.pipeline = transformers.pipeline("text-generation", model=local_dir, model_kwargs={"torch_dtype": torch.float16, "low_cpu_mem_usage": True})
-                terminators = [pipeline.tokenizer.eos_token_id, pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")]
-                models = {args.model: HFSamplerPipeline(pipeline=pipeline, terminators=terminators, model_name=args.model, max_tokens=256)}
+            model = LlamaForCausalLM.from_pretrained(local_dir, torch_dtype=torch.float16, low_cpu_mem_usage=True)
+            tokeniser = AutoTokenizer.from_pretrained(local_dir)
+            models = {args.model: HFSampler(model=model, tokeniser=tokeniser, model_name=args.model, max_new_tokens=256)}
         else:
             models = {args.model: models[args.model]}
 
     # grading_sampler = ChatCompletionSampler(model="gpt-4o")
     # equality_checker = ChatCompletionSampler(model="gpt-4-turbo-preview")
     # ^^^ used for fuzzy matching, just for math
+
+    local_dir = snapshot_download(repo_id="meta-llama/Llama-3.2-3B-Instruct")
+    model = LlamaForCausalLM.from_pretrained(local_dir, torch_dtype=torch.float16, low_cpu_mem_usage=True)
+    tokeniser = AutoTokenizer.from_pretrained(local_dir)
+    grading_sampler = HFSampler(model=model, tokeniser=tokeniser, model_name=args.model, max_new_tokens=256)
+    equality_checker = HFSampler(model=model, tokeniser=tokeniser, model_name=args.model, max_new_tokens=256)
 
     def get_evals(eval_name, debug_mode):
         num_examples = (
@@ -193,9 +196,6 @@ def main():
             case "mmlu":
                 return MMLUEval(num_examples=1 if debug_mode else num_examples, confidence_type=confidence[0])
             case "math":
-                pipeline: transformers.pipeline = transformers.pipeline("text-generation", model=local_dir, model_kwargs={"torch_dtype": torch.float16, "low_cpu_mem_usage": True})
-                terminators = [pipeline.tokenizer.eos_token_id, pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")]
-                equality_checker = HFSamplerPipeline(pipeline=pipeline, terminators=terminators, model_name=args.model, max_tokens=1024)
                 return MathEval(
                     equality_checker=equality_checker,
                     num_examples=num_examples,
@@ -215,9 +215,6 @@ def main():
             case "humaneval":
                 return HumanEval(num_examples=10 if debug_mode else num_examples)
             case "simpleqa":
-                pipeline: transformers.pipeline = transformers.pipeline("text-generation", model=local_dir, model_kwargs={"torch_dtype": torch.float16, "low_cpu_mem_usage": True})
-                terminators = [pipeline.tokenizer.eos_token_id, pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")]
-                grading_sampler = HFSamplerPipeline(pipeline, terminators, model_name=args.model, max_tokens=1024)
                 return SimpleQAEval(
                     grader_model=grading_sampler,
                     num_examples=10 if debug_mode else num_examples,

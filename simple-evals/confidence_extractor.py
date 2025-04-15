@@ -2,7 +2,7 @@ import re
 from .semantic_confidence import *
 from .types import Eval, EvalResult, SamplerBase, SingleEvalResult
 import pandas
-from .sampler.hf_sampler import HFSamplerPipeline
+from .sampler.other_samplers import *
 from .common import (
     MULTILINGUAL_ANSWER_PATTERN_TEMPLATE,
     MULTILINGUAL_ANSWER_REGEXES,
@@ -13,34 +13,34 @@ from .common import (
 )
 
 
-mcq_regex_extractors = {"mmlu": mmlu_regex_extract_response, "gpqa": gpqa_regex_extract_response}
+# mcq_regex_extractors = {"mmlu": mmlu_regex_extract_response, "gpqa": gpqa_regex_extract_response}
 
-## all functions to return a tuple (response_text, extracted_answer, confidence)
-def single_generation_mcq_confidence_extractor(sampler: SamplerBase, prompt_messages, question, answer_key, test="mmlu") -> tuple:
-    response_with_conf = sampler(prompt_messages)
-    response_text, confidence = response_with_conf 
-    extracted_answer = mcq_regex_extractors[test](response_text)
-    score = 1.0 if extracted_answer == answer_key else 0.0
+# ## all functions to return a tuple (response_text, extracted_answer, confidence)
+# def single_generation_mcq_confidence_extractor(sampler: SamplerBase, prompt_messages, question, answer_key, test="mmlu") -> tuple:
+#     response_with_conf = sampler(prompt_messages)
+#     response_text, confidence = response_with_conf 
+#     extracted_answer = mcq_regex_extractors[test](response_text)
+#     score = 1.0 if extracted_answer == answer_key else 0.0
 
-    new_output_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [question], 'answer':[answer_key], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence]})
-    new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [question], 'answer':[answer_key], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence], 'score': [score]})
+#     new_output_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [question], 'answer':[answer_key], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence]})
+#     new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [question], 'answer':[answer_key], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence], 'score': [score]})
 
-    return response_text, extracted_answer, confidence, score, new_ece_row, new_output_row
+#     return response_text, extracted_answer, confidence, score, new_ece_row, new_output_row
 
 
 
-def empirical_semantic_mcq_confidence_extractor(sampler: SamplerBase, prompt_messages, question, answer_key, sampling = 20, test = "mmlu") -> tuple:
-    response_with_conf = [sampler(prompt_messages) for _ in range(sampling)]
-    extracted_answers = [mcq_regex_extractors[test](text[0]) for text in response_with_conf]
-    response_texts, lnll_lst, labels = get_mcq_clusters(response_with_conf, test)
-    response_text, confidence = empirical_semantic_confidence(lnll_lst, response_texts, labels)
-    extracted_answer = mcq_regex_extractors[test](response_text)
-    score = 1.0 if extracted_answer == answer_key else 0.0
+# def empirical_semantic_mcq_confidence_extractor(sampler: SamplerBase, prompt_messages, question, answer_key, sampling = 20, test = "mmlu") -> tuple:
+#     response_with_conf = [sampler(prompt_messages) for _ in range(sampling)]
+#     extracted_answers = [mcq_regex_extractors[test](text[0]) for text in response_with_conf]
+#     response_texts, lnll_lst, labels = get_mcq_clusters(response_with_conf, test)
+#     response_text, confidence = empirical_semantic_confidence(lnll_lst, response_texts, labels)
+#     extracted_answer = mcq_regex_extractors[test](response_text)
+#     score = 1.0 if extracted_answer == answer_key else 0.0
 
-    new_output_row = pandas.DataFrame({'prompt': [prompt_messages] * sampling, 'question': [question] * sampling, 'answer': [answer_key] * sampling, 'response_raw': response_texts, 'response_extracted': extracted_answers, 'confidence': lnll_lst})
-    new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [question], 'answer':[answer_key], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence], 'score': [score]})
+#     new_output_row = pandas.DataFrame({'prompt': [prompt_messages] * sampling, 'question': [question] * sampling, 'answer': [answer_key] * sampling, 'response_raw': response_texts, 'response_extracted': extracted_answers, 'confidence': lnll_lst})
+#     new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [question], 'answer':[answer_key], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence], 'score': [score]})
 
-    return response_text, extracted_answer, confidence, score, new_ece_row, new_output_row
+#     return response_text, extracted_answer, confidence, score, new_ece_row, new_output_row
 
 
 VANILLA_PROMPT = """Read the question, provide your answer and your confidence in this answer. Note: The confidence indicates how likely you think your answer is true.
@@ -70,10 +70,10 @@ def regex_extract_reponse(response_text) -> str | None:
             break
     return extracted_answer
 
-def mmlu_vanilla_confidence(sampler: HFSamplerPipeline, prompt_messages: str, row) -> tuple:
+def mmlu_vanilla_confidence(sampler: SamplerBase, prompt_messages: str, row) -> tuple:
     sampler.system_message = VANILLA_PROMPT
 
-    response_text = normalize_response(sampler(prompt_messages))
+    response_text = normalize_response(sampler(prompt_messages)[0])
 
     confidence = 0.0
     ans_and_conf = response_text.split('\n')[0].replace("%", "").replace(")", ":").replace(",", ":")
@@ -105,10 +105,10 @@ def mmlu_vanilla_confidence(sampler: HFSamplerPipeline, prompt_messages: str, ro
 
     return (response_text, extracted_answer, confidence, score, new_row, new_row)
     
-def mmlu_cot_confidence(sampler: HFSamplerPipeline, prompt_messages: str, row) -> tuple:
+def mmlu_cot_confidence(sampler: SamplerBase, prompt_messages: str, row) -> tuple:
     sampler.system_message = COT_PROMPT
 
-    response_text = normalize_response(sampler(prompt_messages))
+    response_text = normalize_response(sampler(prompt_messages)[0])
 
     confidence = 0.0
     ans_and_conf = response_text.split('\n')[-1].split(':')[-1].strip(' ').replace("%", "").replace(',', ":").replace(')', ":").replace(' ', ':')
@@ -145,10 +145,10 @@ def mmlu_cot_confidence(sampler: HFSamplerPipeline, prompt_messages: str, row) -
 
     return (response_text, extracted_answer, confidence, score, new_row, new_row)
 
-def gpqa_vanilla_confidence(sampler: HFSamplerPipeline, prompt_messages: str, row) -> tuple:
+def gpqa_vanilla_confidence(sampler: SamplerBase, prompt_messages: str, row) -> tuple:
     sampler.system_message = VANILLA_PROMPT
 
-    response_text = sampler(prompt_messages)
+    response_text = sampler(prompt_messages)[0]
 
     confidence = 0.0
     ans_and_conf = response_text.split('\n')[0].replace("%", "").replace(")", ":").replace(",", ":")
@@ -175,9 +175,9 @@ def gpqa_vanilla_confidence(sampler: HFSamplerPipeline, prompt_messages: str, ro
 
     return (response_text, extracted_answer, confidence, score, new_row, new_row)
 
-def gpqa_cot_confidence(sampler: HFSamplerPipeline, prompt_messages: str, row) -> tuple:
+def gpqa_cot_confidence(sampler: SamplerBase, prompt_messages: str, row) -> tuple:
     sampler.system_message = COT_PROMPT
-    response_text = sampler(prompt_messages)
+    response_text = sampler(prompt_messages)[0]
 
     confidence = 0.0
     ans_and_conf = response_text.split('\n')[-1].split(':')[-1].strip(' ').replace("%", "").replace(',', ":").replace(')', ":").replace(' ', ':')

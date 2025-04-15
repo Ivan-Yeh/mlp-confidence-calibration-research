@@ -65,7 +65,6 @@ class GPQAEval(Eval):
             match self.confidence_type:
                 
                 case "empirical-semantic":
-                    empirical_semantic_mcq_confidence_extractor(sampler, prompt_messages, format_multichoice_question(choices_dict), correct_answer, sampling, "gpqa")
                     response_with_conf = [sampler(prompt_messages) for _ in range(sampling)]
                     extracted_answers = [gpqa_regex_extract_response(text[0]) for text in response_with_conf]
                     response_texts, lnll_lst, labels = get_mcq_clusters(response_with_conf, "gpqa")
