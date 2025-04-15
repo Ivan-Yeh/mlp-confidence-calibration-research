@@ -30,6 +30,7 @@ MULTILINGUAL_ANSWER_PATTERN_TEMPLATE = (
 # All the different ways "Answer" is written in different languages
 MULTILINGUAL_ANSWER_REGEXES = [
     "Answer\s*:",
+    "Answer and Confidence\s*:",
     "Answer\s*:​​​​​​",  # Korean invisible character
     "উত্তর\s*:",
     "उत्तर\s*:",

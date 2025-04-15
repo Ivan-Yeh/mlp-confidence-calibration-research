@@ -6,21 +6,18 @@ https://arxiv.org/abs/2009.03300
 
 import random
 import re
+
 import pandas
 
 from . import common
 from .common import (
     HTML_JINJA,
-    MULTILINGUAL_ANSWER_PATTERN_TEMPLATE,
-    MULTILINGUAL_ANSWER_REGEXES,
-    format_multichoice_question,
-    normalize_extracted_answer,
-    normalize_response,
+    format_multichoice_question
 )
 from .types import Eval, EvalResult, SamplerBase, SingleEvalResult
-
 from .ece import ece_equal_width, ece_equal_weight
 from .semantic_confidence import *
+from .confidence_extractor import *
 import time
 
 subject2category = {
@@ -96,7 +93,7 @@ class MMLUEval(Eval):
             examples = random.Random(0).sample(examples, num_examples)
         self.examples = examples
         self.confidence_type = confidence_type[0] if isinstance(confidence_type, list) else confidence_type
-        self.outputs = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence'])
+        self.outputs: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence'])
         self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'score'])
 
 
@@ -135,7 +132,13 @@ class MMLUEval(Eval):
                     score = 1.0 if extracted_answer == row["Answer"] else 0.0
                     new_output_row = pandas.DataFrame({'prompt': [prompt_messages] * sampling, 'question': [format_multichoice_question(row)] * sampling, 'answer': [row["Answer"]] * sampling, 'response_raw': response_texts, 'response_extracted': extracted_answers, 'confidence': lnll_lst})
                     new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [format_multichoice_question(row)], 'answer':[row["Answer"]], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence], 'score': [score]})
-
+                
+                case "verbal-vanilla": 
+                    response_text, extracted_answer, confidence, score, new_ece_row, new_output_row = mmlu_vanilla_confidence(sampler, prompt_messages, row)
+                
+                case "verbal-cot": 
+                    response_text, extracted_answer, confidence, score, new_ece_row, new_output_row = mmlu_cot_confidence(sampler, prompt_messages, row)
+                    
                 case _:
                     raise Exception(f"Unrecognized confidence type: {self.confidence_type}")
                 
@@ -148,7 +151,7 @@ class MMLUEval(Eval):
                 score=score,
                 correct_answer=row["Answer"],
                 extracted_answer=extracted_answer,
-                confidence = confidence
+                confidence=confidence,
             )
             convo = prompt_messages + [dict(content=response_text, role="assistant")]
             category = subject2category.get(row["Subject"], "other")
@@ -162,21 +165,5 @@ class MMLUEval(Eval):
         print(self.outputs)
         print(ece_equal_weight(self.ece_df, 10, f"tmp/{sampler.model_name}_mmlu_{self.confidence_type}_equal_weight_ece.csv"))
         print(ece_equal_width(self.ece_df, 10, f"tmp/{sampler.model_name}_mmlu_{self.confidence_type}_equal_width_ece.csv"))
-        # print(self.ece_dfs)
-        # print("##################")
-        # print("TEST RESULTS") 
-        # with open("tmp/mmlu_results.txt", "w") as f:
-        #     for i, name in enumerate(["SGC", "ESC", "LSC", "MLSC", "BSC"]):
-        #         print("Accuracy", name, self.ece_dfs[i]["accuracy"].mean() ,file=f)
-        #         print("Accuracy", name, self.ece_dfs[i]["accuracy"].mean())
-        #         self.ece_dfs[i].to_csv(f"tmp/ece_{name}.csv", index=False)
-        # print("##################")
-        # print()
-        # for i, name in enumerate(["SGC", "ESC", "LSC", "MLSC", "BSC"]):
-        #     print("EQUAL WEIGHT ECE", name)
-        #     print(ece_equal_weight(self.ece_dfs[i], file_path=f"tmp/equal_weight_ece_{name}.csv"))
-        #     print("EQUAL WIDTH ECE", name)
-        #     print(ece_equal_width(self.ece_dfs[i], file_path=f"tmp/equal_width_ece_{name}.csv"))
-        #     print("##################")
-        #     print()
+
         return common.aggregate_results(results)

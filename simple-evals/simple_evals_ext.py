@@ -154,7 +154,7 @@ def main():
     else:
         confidence = ["single-generation"]
 
-    
+    login(token=os.environ["HF_TOKEN"])
     hf_models = [k for k, v in models.items() if v == None]
     if args.list_models:
         print("Available models:")
@@ -167,7 +167,7 @@ def main():
             return
         elif args.model in hf_models:
             # setup HF model
-            login(token=os.environ["HF_TOKEN"])
+            
             local_dir = snapshot_download(repo_id=args.model)
             if confidence[0] in logits_sampler:
                 model = LlamaForCausalLM.from_pretrained(local_dir, torch_dtype=torch.float16, low_cpu_mem_usage=True)
@@ -191,7 +191,7 @@ def main():
         # Set num_examples = None to reproduce full evals
         match eval_name:
             case "mmlu":
-                return MMLUEval(num_examples=1 if debug_mode else num_examples, confidence_type=confidence)
+                return MMLUEval(num_examples=1 if debug_mode else num_examples, confidence_type=confidence[0])
             case "math":
                 pipeline: transformers.pipeline = transformers.pipeline("text-generation", model=local_dir, model_kwargs={"torch_dtype": torch.float16, "low_cpu_mem_usage": True})
                 terminators = [pipeline.tokenizer.eos_token_id, pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")]
@@ -203,7 +203,7 @@ def main():
                 )
             case "gpqa":
                 return GPQAEval(
-                    n_repeats=1 if debug_mode else 1, num_examples=num_examples, confidence_type=confidence
+                    n_repeats=1 if debug_mode else 10, num_examples=num_examples, confidence_type=confidence[0]
                 )
             case "mgsm":
                 return MGSMEval(num_examples_per_lang=10 if debug_mode else 250)
@@ -238,13 +238,13 @@ def main():
             result = eval_obj(sampler)
             # ^^^ how to use a sampler
             file_stem = f"{eval_name}_{model_name.split("/")[-1]}"
-            report_filename = f"tmp/{file_stem}{debug_suffix}.html"
+            report_filename = f"./tmp/{file_stem}{debug_suffix}.html"
             print(f"Writing report to {report_filename}")
-            with open(report_filename, "w") as fh:
+            with open(report_filename, "w", encoding="utf-8") as fh:
                 fh.write(common.make_report(result))
             metrics = result.metrics | {"score": result.score}
             print(metrics)
-            result_filename = f"tmp/{file_stem}{debug_suffix}.json"
+            result_filename = f"./tmp/{file_stem}{debug_suffix}.json"
             with open(result_filename, "w") as f:
                 f.write(json.dumps(metrics, indent=2))
             print(f"Writing results to {result_filename}")

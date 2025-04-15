@@ -5,16 +5,13 @@ https://arxiv.org/abs/2311.12022
 """
 
 import random
-import re
-
+import time
 import pandas
-
 from . import common
 from .common import ANSWER_PATTERN_MULTICHOICE, HTML_JINJA, format_multichoice_question
 from .types import Eval, EvalResult, MessageList, SamplerBase, SingleEvalResult
 from .confidence_extractor import *
 from .ece import ece_equal_width, ece_equal_weight
-import time
 
 class GPQAEval(Eval):
     def __init__(
@@ -37,7 +34,7 @@ class GPQAEval(Eval):
         self.examples = examples
         self.n_repeats = n_repeats
         self.confidence_type = confidence_type[0] if isinstance(confidence_type, list) else confidence_type
-        self.outputs = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence'])
+        self.outputs: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence'])
         self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'score'])
 
     def __call__(self, sampler: SamplerBase) -> EvalResult:
@@ -60,9 +57,11 @@ class GPQAEval(Eval):
                 )
             ]
             print(format_multichoice_question(choices_dict))
-            # Call confidence extracting function & return (response_text, extracted_answer, confidence, score, new_ece_row, new_output_row)
+
+            # prepare (response_text, extracted_answer, confidence, score, new_ece_row, new_output_row) with different confidence types
             #---------------------------------------------------------------------------------------------------------------------
             sampling = 2
+
             match self.confidence_type:
                 
                 case "empirical-semantic":
@@ -84,6 +83,12 @@ class GPQAEval(Eval):
                     new_output_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [format_multichoice_question(choices_dict)], 'answer':[correct_answer], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence]})
                     new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [format_multichoice_question(choices_dict)], 'answer':[correct_answer], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence], 'score': [score]})
                 
+                case "verbal-vanilla": 
+                    response_text, extracted_answer, confidence, score, new_ece_row, new_output_row = gpqa_vanilla_confidence(sampler, prompt_messages, row)
+
+                case "verbal-cot": 
+                    response_text, extracted_answer, confidence, score, new_ece_row, new_output_row = gpqa_cot_confidence(sampler, prompt_messages, row)
+                    
                 case _:
                     raise Exception(f"Unrecognized confidence type: {self.confidence_type}")
                 
@@ -96,7 +101,7 @@ class GPQAEval(Eval):
                 score=score,
                 correct_answer=correct_answer,
                 extracted_answer=extracted_answer,
-                confidence = confidence
+                confidence=confidence,
             )
             convo = prompt_messages + [dict(content=response_text, role="assistant")]
             return SingleEvalResult(
