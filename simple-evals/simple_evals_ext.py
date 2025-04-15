@@ -50,6 +50,7 @@ def main():
 
     with open("api.json", "r") as f:
         DATABRICKS_TOKEN = json.load(f)["DATABRICKS_TOKEN"]
+        TOGETHER_AI_TOKEN = json.load(f)["TOGETHER_AI_TOKEN"]
 
     models = {
         # chatgpt models:
@@ -118,6 +119,7 @@ def main():
         #     system_message=CLAUDE_SYSTEM_MESSAGE_LMSYS,
         # ),
         # HF models: None by default; only constructed when chosen
+        "mistralai/Mixtral-8x7B-Instruct-v0.1": TogetherSampler(api_key=TOGETHER_AI_TOKEN, model_id="mistralai/Mixtral-8x7B-Instruct-v0.1", model_name="mistralai/Mixtral-8x7B-Instruct-v0.1", max_tokens=128),
         "databricks-meta-llama-3-3-70b-instruct": DBSampler(api_key=DATABRICKS_TOKEN, model_url="https://dbc-b04afa5d-8e3e.cloud.databricks.com/serving-endpoints", model_name="databricks-meta-llama-3-3-70b-instruct", max_tokens=128),
         "databricks-claude-3-7-sonnet": DBSampler(api_key=DATABRICKS_TOKEN, model_url="https://dbc-b04afa5d-8e3e.cloud.databricks.com/serving-endpoints", model_name="databricks-claude-3-7-sonnet", max_tokens=128),
         "meta-llama/Llama-3.2-3B-Instruct": None,
