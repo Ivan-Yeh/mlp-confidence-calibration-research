@@ -31,7 +31,7 @@ class HFSamplerPipeline(SamplerBase):
 
         self.pipeline = pipeline
         self.terminators = terminators
-        self.model_name = model_name
+        self.model_name = str(model_name).split("/")[-1]
         self.system_message = system_message
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -90,7 +90,7 @@ class HFSamplerTokeniser(SamplerBase):
 
         self.model = model
         self.tokeniser = tokeniser
-        self.model_name = model_name
+        self.model_name = str(model_name).split("/")[-1]
         self.system_message = system_message
         self.temperature = temperature
         self.max_new_tokens = max_new_tokens

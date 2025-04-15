@@ -6,7 +6,6 @@ https://arxiv.org/abs/2009.03300
 
 import random
 import re
-
 import pandas
 
 from . import common
@@ -21,9 +20,8 @@ from .common import (
 from .types import Eval, EvalResult, SamplerBase, SingleEvalResult
 
 from .ece import ece_equal_width, ece_equal_weight
-from sentence_transformers import SentenceTransformer
-from sklearn.cluster import AgglomerativeClustering
-from .semantic_confidence import single_generation_confidence, empirical_semantic_confidence, likelihood_based_semantic_confidence, mean_likelihood_based_semantic_confidence, bayesian_semantic_confidence
+from .semantic_confidence import *
+import time
 
 subject2category = {
     "abstract_algebra": "stem",
@@ -87,7 +85,7 @@ subject2category = {
 
 
 class MMLUEval(Eval):
-    def __init__(self, num_examples: int | None = None, language: str = "EN-US"):
+    def __init__(self, num_examples: int | None = None, language: str = "EN-US", confidence_type = "single-generation"):
         if language != "EN-US":
             url = f"https://openaipublic.blob.core.windows.net/simple-evals/mmlu_{language}.csv"
         else:
@@ -97,70 +95,60 @@ class MMLUEval(Eval):
         if num_examples:
             examples = random.Random(0).sample(examples, num_examples)
         self.examples = examples
-        self.ece_dfs: list[pandas.DataFrame] = [pandas.DataFrame(columns=['question', 'answer', 'predicted_answer', 'confidence', 'accuracy'])] * 5
+        self.confidence_type = confidence_type[0] if isinstance(confidence_type, list) else confidence_type
+        self.outputs = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence'])
+        self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'score'])
+
 
     def __call__(self, sampler: SamplerBase) -> EvalResult:
         def fn(row: dict):
             prompt_messages = [
                 sampler._pack_message(
-                    content=format_multichoice_question(row) + " Respond starting with the word 'Answer:' followed by only one of ABCD and the option", role="user"
+                    content=format_multichoice_question(row) + " Response starting with the word 'Answer:' followed by only one of ABCD and the option", role="user"
                 )
             ]
-
             print(format_multichoice_question(row))
-            response_sample = [sampler(prompt_messages) for _ in range(20)]
-            confidence_methods: list[function] = [single_generation_confidence, 
-                                                                      empirical_semantic_confidence, 
-                                                                      likelihood_based_semantic_confidence, 
-                                                                      mean_likelihood_based_semantic_confidence, 
-                                                                      bayesian_semantic_confidence]
-            model_name="all-MiniLM-L6-v2"
-            distance_threshold = 0.15
-            lnll_lst = [(x)[1] for x in response_sample]
-            response_list = [x[0] for x in response_sample]
-            embeddings = SentenceTransformer(model_name).encode(response_list)
-            clustering = AgglomerativeClustering(n_clusters=None, distance_threshold=distance_threshold, metric="cosine", linkage="average")
-            labels = clustering.fit_predict(embeddings)
+            response_text = ""
+            extracted_answer = ""
+            confidence = ""
 
-            for i, method in enumerate(confidence_methods):
-                response_text, confidence = method(lnll_lst, response_list, labels)
+            # Call confidence extracting function & return (response_text, extracted_answer, confidence, score, new_ece_row, new_output_row)
+            #---------------------------------------------------------------------------------------------------------------------
+            sampling = 2
+
+            match self.confidence_type:
                 
-                response_text = normalize_response(response_text)
-                print(response_text)
-                extracted_answer = None
-                for answer_regex in MULTILINGUAL_ANSWER_REGEXES:
-                    regex = MULTILINGUAL_ANSWER_PATTERN_TEMPLATE.format(answer_regex)
-                    match = re.search(regex, response_text)
-                    if match:
-                        extracted_answer = normalize_extracted_answer(match.group(1))
-                        break
-                score = 1.0 if extracted_answer == row["Answer"] else 0.0
+                case "single-generation":
+                    response_with_conf = sampler(prompt_messages)
+                    response_text, confidence = response_with_conf 
+                    extracted_answer = mmlu_regex_extract_response(response_text)
+                    score = 1.0 if extracted_answer == row["Answer"] else 0.0
+                    new_output_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [format_multichoice_question(row)], 'answer':[row["Answer"]], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence]})
+                    new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [format_multichoice_question(row)], 'answer':[row["Answer"]], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence], 'score': [score]})
 
-                new_row = pandas.DataFrame({"question": [format_multichoice_question(row)], 
-                                            "answer": [row["Answer"]], 
-                                            "predicted_answer": [extracted_answer], 
-                                            "confidence": [confidence], 
-                                            "accuracy": [score]})
-                print(extracted_answer)
-                self.ece_dfs[i] = pandas.concat([self.ece_dfs[i], new_row], ignore_index=True)
-            
-            
-            response_text, confidence = bayesian_semantic_confidence(lnll_lst, response_list, labels)
-            response_text = normalize_response(response_text)
-            extracted_answer = None
-            for answer_regex in MULTILINGUAL_ANSWER_REGEXES:
-                regex = MULTILINGUAL_ANSWER_PATTERN_TEMPLATE.format(answer_regex)
-                match = re.search(regex, response_text)
-                if match:
-                    extracted_answer = normalize_extracted_answer(match.group(1))
-                    break
-            score = 1.0 if extracted_answer == row["Answer"] else 0.0
+                case "empirical-semantic":
+                    response_with_conf = [sampler(prompt_messages) for _ in range(sampling)]
+                    extracted_answers = [mmlu_regex_extract_response(text[0]) for text in response_with_conf]
+                    response_texts, lnll_lst, labels = get_mcq_clusters(response_with_conf, "mmlu")
+                    response_text, confidence = empirical_semantic_confidence(lnll_lst, response_texts, labels)
+                    extracted_answer = mmlu_regex_extract_response(response_text)
+                    score = 1.0 if extracted_answer == row["Answer"] else 0.0
+                    new_output_row = pandas.DataFrame({'prompt': [prompt_messages] * sampling, 'question': [format_multichoice_question(row)] * sampling, 'answer': [row["Answer"]] * sampling, 'response_raw': response_texts, 'response_extracted': extracted_answers, 'confidence': lnll_lst})
+                    new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [format_multichoice_question(row)], 'answer':[row["Answer"]], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence], 'score': [score]})
+
+                case _:
+                    raise Exception(f"Unrecognized confidence type: {self.confidence_type}")
+                
+            self.ece_df = pandas.concat([self.ece_df, new_ece_row], ignore_index=True)
+            self.outputs = pandas.concat([self.outputs, new_output_row], ignore_index=True)
+        #---------------------------------------------------------------------------------------------------------------------
             html = common.jinja_env.from_string(HTML_JINJA).render(
                 prompt_messages=prompt_messages,
                 next_message=dict(content=response_text, role="assistant"),
                 score=score,
                 correct_answer=row["Answer"],
                 extracted_answer=extracted_answer,
+                confidence = confidence
             )
             convo = prompt_messages + [dict(content=response_text, role="assistant")]
             category = subject2category.get(row["Subject"], "other")
@@ -169,22 +157,26 @@ class MMLUEval(Eval):
             )
         
         results = common.map_with_progress(fn, self.examples)
-
-        print(self.ece_dfs)
-        print("##################")
-        print("TEST RESULTS") 
-        with open("tmp/mmlu_results.txt", "w") as f:
-            for i, name in enumerate(["SGC", "ESC", "LSC", "MLSC", "BSC"]):
-                print("Accuracy", name, self.ece_dfs[i]["accuracy"].mean() ,file=f)
-                print("Accuracy", name, self.ece_dfs[i]["accuracy"].mean())
-                self.ece_dfs[i].to_csv(f"tmp/ece_{name}.csv", index=False)
-        print("##################")
-        print()
-        for i, name in enumerate(["SGC", "ESC", "LSC", "MLSC", "BSC"]):
-            print("EQUAL WEIGHT ECE", name)
-            print(ece_equal_weight(self.ece_dfs[i], file_path=f"tmp/equal_weight_ece_{name}.csv"))
-            print("EQUAL WIDTH ECE", name)
-            print(ece_equal_width(self.ece_dfs[i], file_path=f"tmp/equal_width_ece_{name}.csv"))
-            print("##################")
-            print()
+        self.outputs.to_csv(f"tmp/{sampler.model_name}_mmlu_{self.confidence_type}_outputs.csv")
+        self.ece_df.to_csv(f"tmp/{sampler.model_name}_mmlu_{self.confidence_type}_unprocessed_ece.csv")
+        print(self.outputs)
+        print(ece_equal_weight(self.ece_df, 10, f"tmp/{sampler.model_name}_mmlu_{self.confidence_type}_equal_weight_ece.csv"))
+        print(ece_equal_width(self.ece_df, 10, f"tmp/{sampler.model_name}_mmlu_{self.confidence_type}_equal_width_ece.csv"))
+        # print(self.ece_dfs)
+        # print("##################")
+        # print("TEST RESULTS") 
+        # with open("tmp/mmlu_results.txt", "w") as f:
+        #     for i, name in enumerate(["SGC", "ESC", "LSC", "MLSC", "BSC"]):
+        #         print("Accuracy", name, self.ece_dfs[i]["accuracy"].mean() ,file=f)
+        #         print("Accuracy", name, self.ece_dfs[i]["accuracy"].mean())
+        #         self.ece_dfs[i].to_csv(f"tmp/ece_{name}.csv", index=False)
+        # print("##################")
+        # print()
+        # for i, name in enumerate(["SGC", "ESC", "LSC", "MLSC", "BSC"]):
+        #     print("EQUAL WEIGHT ECE", name)
+        #     print(ece_equal_weight(self.ece_dfs[i], file_path=f"tmp/equal_weight_ece_{name}.csv"))
+        #     print("EQUAL WIDTH ECE", name)
+        #     print(ece_equal_width(self.ece_dfs[i], file_path=f"tmp/equal_width_ece_{name}.csv"))
+        #     print("##################")
+        #     print()
         return common.aggregate_results(results)

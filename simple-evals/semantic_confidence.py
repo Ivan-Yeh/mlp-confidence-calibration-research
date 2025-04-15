@@ -1,6 +1,15 @@
 import numpy as np
 from collections import Counter
-
+from sentence_transformers import SentenceTransformer
+from sklearn.cluster import AgglomerativeClustering
+from .common import (
+    MULTILINGUAL_ANSWER_PATTERN_TEMPLATE,
+    MULTILINGUAL_ANSWER_REGEXES,
+    normalize_extracted_answer,
+    normalize_response,
+    ANSWER_PATTERN_MULTICHOICE
+)
+import re
 # ---------------------------------------------------------
 # model_name="all-MiniLM-L6-v2"
 # distance_threshold = 0.7
@@ -11,9 +20,42 @@ from collections import Counter
 # labels = clustering.fit_predict(embeddings)
 # ---------------------------------------------------------
 
+def mmlu_regex_extract_response(response_text):
+    response_text = normalize_response(response_text)
+    extracted_answer = None
+    for answer_regex in MULTILINGUAL_ANSWER_REGEXES:
+        regex = MULTILINGUAL_ANSWER_PATTERN_TEMPLATE.format(answer_regex)
+        match = re.search(regex, response_text)
+        if match:
+            extracted_answer = normalize_extracted_answer(match.group(1))
+            break
+    return extracted_answer
 
-def single_generation_confidence(lnll_lst, response_list, labels):
-    return response_list[0], lnll_lst[0]
+def gpqa_regex_extract_response(response_text):
+    match = re.search(ANSWER_PATTERN_MULTICHOICE, response_text)
+    extracted_answer = match.group(1) if match else None
+    return extracted_answer
+
+mcq_regex_extractors = {"mmlu": mmlu_regex_extract_response, "gpqa": gpqa_regex_extract_response}
+
+def get_semantic_clusters(multi_response):
+    lnll_lst = [(x)[1] for x in multi_response]
+    response_list = [x[0] for x in multi_response]
+    distance_threshold = 0.3
+    model_name="all-MiniLM-L6-v2"
+    embeddings = SentenceTransformer(model_name).encode(response_list)
+    clustering = AgglomerativeClustering(n_clusters=None, distance_threshold=distance_threshold, metric="cosine", linkage="average")
+    labels = clustering.fit_predict(embeddings)
+    return response_list, lnll_lst, labels
+
+
+def get_mcq_clusters(multi_response, test = "mmlu"):
+    lnll_lst = [(x)[1] for x in multi_response]
+    response_list = [x[0] for x in multi_response]
+    choice_map = dict()
+    choice_map = {'A': 1, 'B': 2, 'C': 3, 'D': 4, 'a': 1, 'b': 2, 'c': 3, 'd': 4}
+    labels = [choice_map.get(mcq_regex_extractors[test](c), 0) for c in response_list]
+    return response_list, lnll_lst, labels
 
 
 def empirical_semantic_confidence(lnll_lst, response_list, labels):

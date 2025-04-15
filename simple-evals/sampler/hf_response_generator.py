@@ -57,10 +57,12 @@ def response_tokeniser_with_sgc(message_lst: list[dict], tokeniser: AutoTokenize
     with torch.no_grad():
         outputs = model.generate(
             inputs['input_ids'], 
+            attention_mask=inputs["attention_mask"],
             max_new_tokens=max_new_tokens, 
             return_dict_in_generate=True, 
             output_logits=True,
             output_scores=True,
-            top_p =0.9
+            top_p =0.9,
+            pad_token_id=tokeniser.eos_token_id
         )
     return "".join(tokeniser.batch_decode(outputs.sequences[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True)), float(np.exp(model.compute_transition_scores(outputs.sequences, outputs.scores, normalize_logits=True).numpy(force=True)).mean())

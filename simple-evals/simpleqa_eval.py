@@ -11,6 +11,7 @@ from . import common
 from .types import Eval, EvalResult, SamplerBase, SingleEvalResult
 
 from .ece import ece_equal_width, ece_equal_weight
+from .semantic_confidence import *
 
 GRADER_TEMPLATE = """
 Your job is to look at a question, a gold target, and a predicted answer, and then assign a grade of either ["CORRECT", "INCORRECT", "NOT_ATTEMPTED"].
@@ -103,7 +104,7 @@ CHOICE_STRINGS = ["CORRECT", "INCORRECT", "NOT_ATTEMPTED"]
 CHOICE_LETTER_TO_STRING = dict(zip(CHOICE_LETTERS, CHOICE_STRINGS))
 
 class SimpleQAEval(Eval):
-    def __init__(self, grader_model: SamplerBase, num_examples: int | None = None, n_repeats: int = 1):
+    def __init__(self, grader_model: SamplerBase, num_examples: int | None = None, n_repeats: int = 1, confidence_type = "single-generation"):
         df = pandas.read_csv(
             f"https://openaipublic.blob.core.windows.net/simple-evals/simple_qa_test_set.csv"
         )
@@ -114,7 +115,10 @@ class SimpleQAEval(Eval):
             examples = rng.sample(examples, num_examples)
         self.examples = examples * n_repeats
         self.grader_model = grader_model
-        self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['question', 'answer', 'predicted_answer', 'confidence', 'accuracy'])
+        self.confidence_type = confidence_type
+        self.outputs = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence'])
+        self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'score'])
+        # self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['question', 'answer', 'predicted_answer', 'confidence', 'accuracy'])
 
     def grade_sample(self, question: str, target: str, predicted_answer: str) -> str:
         grader_prompt = GRADER_TEMPLATE.format(
@@ -143,14 +147,40 @@ class SimpleQAEval(Eval):
 
     def __call__(self, sampler: SamplerBase) -> EvalResult:
             def fn(row: dict):
-                prompt_messages = [
-                    sampler._pack_message(content=row.get("problem", "") + "Be concise. At the very end of your response, add your confidence in percentage in the correctness of your response in square brackets without explanation.", role="user")
-                ]
-                response_text = sampler(prompt_messages)
-                grade_letter = self.grade_sample(row.get("problem", ""), row.get("answer", ""), response_text)
-                new_row = pandas.DataFrame({"question": [row.get("problem", "")], "answer": [row.get("answer", "")], "predicted_answer": [response_text], "confidence": [self.extract_confidence(response_text)], "accuracy": [grade_letter == "A"]})
-                print(new_row.to_dict())
-                self.ece_df = pandas.concat([self.ece_df, new_row], ignore_index=True)
+                #-----------------------------------------------------------------------------------
+                sampling = 2
+                match self.confidence_type:
+                    
+                    case "empirical-semantic":
+                        prompt_messages = [
+                            sampler._pack_message(content=row.get("problem", ""), role="user")
+                        ]
+                        response_with_conf = [sampler(prompt_messages) for _ in range(sampling)]
+                        response_texts, lnll_lst, labels = get_semantic_clusters(response_with_conf)
+                        response_text, confidence = empirical_semantic_confidence(lnll_lst, response_texts, labels)
+                        grade_letter = self.grade_sample(row.get("problem", ""), row.get("answer", ""), response_text)
+
+                        new_output_row = pandas.DataFrame({'prompt': [prompt_messages] * sampling, 'question': [row.get("problem", "")] * sampling, 'answer': [row.get("answer", "")] * sampling, 'response_raw': response_texts, 'response_extracted': response_texts, 'confidence': lnll_lst})
+                        new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [row.get("problem", "")], 'answer':[row.get("answer", "")], 'response_raw': [response_text], 'response_extracted': [response_text], 'confidence': [confidence], 'score': [grade_letter == "A"]})
+
+                    case "single-generation":
+                        prompt_messages = [
+                            sampler._pack_message(content=row.get("problem", ""), role="user")
+                        ]
+                        response_text, confidence = sampler(prompt_messages)
+                        grade_letter = self.grade_sample(row.get("problem", ""), row.get("answer", ""), response_text)
+
+                        new_output_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [row.get("problem", "")], 'answer': [row.get("answer", "")], 'response_raw': [response_text], 'response_extracted': [response_text], 'confidence': [confidence]})
+                        new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [row.get("problem", "")], 'answer':[row.get("answer", "")], 'response_raw': [response_text], 'response_extracted': [response_text], 'confidence': [confidence], 'score': [grade_letter == "A"]})
+
+                    case _:
+                        raise Exception(f"Unrecognized confidence type: {self.confidence_type}")
+                    
+                self.ece_df = pandas.concat([self.ece_df, new_ece_row], ignore_index=True) 
+                self.outputs = pandas.concat([self.outputs, new_output_row], ignore_index=True) 
+                
+                
+                # ----------------------------------------------------------------------------------
 
                 # Metrics based on grading response
                 is_correct = grade_letter == "A"
@@ -166,6 +196,7 @@ class SimpleQAEval(Eval):
                     score=score,
                     correct_answer=row["answer"],
                     extracted_answer=response_text,
+                    confidence = confidence
                 )
                 convo = prompt_messages + [dict(content=response_text, role="assistant")]
                 return SingleEvalResult(html=html, score=score, convo=convo, metrics={
@@ -191,11 +222,11 @@ class SimpleQAEval(Eval):
                 if aggregate_metrics["is_given_attempted"] > 0
                 else 0
             )
-
-            # Calculate ECE
-            print(ece_equal_weight(self.ece_df))
-            print(ece_equal_width(self.ece_df))
-
+            self.outputs.to_csv(f"tmp/{sampler.model_name}_simpleqa_{self.confidence_type}_outputs.csv")
+            self.ece_df.to_csv(f"tmp/{sampler.model_name}_simpleqa_{self.confidence_type}_unprocessed_ece.csv")
+            print(self.outputs)
+            print(ece_equal_weight(self.ece_df, 10, f"tmp/{sampler.model_name}_simpleqa_{self.confidence_type}_equal_weight_ece.csv"))
+            print(ece_equal_width(self.ece_df, 10, f"tmp/{sampler.model_name}_simpleqa_{self.confidence_type}_equal_width_ece.csv"))
             print("AGGREGATE METRICS") 
             print(aggregate_metrics) 
             print("##################")
@@ -212,7 +243,6 @@ class SimpleQAEval(Eval):
             
             print(f"Accuracy Given Attempted: {output_d['accuracy_given_attempted']:.3f}")
             print(f"F1 Score: {output_d['f1']:.3f}")
-            self.ece_df.to_csv("tmp/simpleqa.csv")
             return common.aggregate_results(results)
     
 
