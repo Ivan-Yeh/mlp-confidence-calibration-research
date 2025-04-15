@@ -203,7 +203,7 @@ def main():
                 )
             case "gpqa":
                 return GPQAEval(
-                    n_repeats=1 if debug_mode else 10, num_examples=num_examples, confidence_type=confidence[0]
+                    n_repeats=1 if debug_mode else 1, num_examples=num_examples, confidence_type=confidence[0]
                 )
             case "mgsm":
                 return MGSMEval(num_examples_per_lang=10 if debug_mode else 250)
