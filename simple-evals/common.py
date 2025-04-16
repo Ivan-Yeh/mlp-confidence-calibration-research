@@ -30,6 +30,7 @@ MULTILINGUAL_ANSWER_PATTERN_TEMPLATE = (
 # All the different ways "Answer" is written in different languages
 MULTILINGUAL_ANSWER_REGEXES = [
     "Answer\s*:",
+    "Answer and Confidence\s*:",
     "Answer\s*:​​​​​​",  # Korean invisible character
     "উত্তর\s*:",
     "उत्तर\s*:",
@@ -145,6 +146,7 @@ HTML_JINJA = """
 <h3>Results</h3>
 <p>Correct Answer: {{ correct_answer }}</p>
 <p>Extracted Answer: {{ extracted_answer }}</p>
+<p>Extracted Confidence: {{ confidence }}</p>
 <p>Score: {{ score }}</p>
 """
 

@@ -5,21 +5,21 @@ https://arxiv.org/abs/2311.12022
 """
 
 import random
-import re
-
+import time
 import pandas
-
 from . import common
 from .common import ANSWER_PATTERN_MULTICHOICE, HTML_JINJA, format_multichoice_question
 from .types import Eval, EvalResult, MessageList, SamplerBase, SingleEvalResult
-
+from .confidence_extractor import *
+from .ece import ece_equal_width, ece_equal_weight
 
 class GPQAEval(Eval):
     def __init__(
         self,
-        n_repeats: int = 4,
+        n_repeats: int = 1,
         variant: str = "diamond",
         num_examples: int | None = None,  # restrict to a subset of the data for debugging
+        confidence_type = "single-generation"
     ):
         df = pandas.read_csv(
             f"https://openaipublic.blob.core.windows.net/simple-evals/gpqa_{variant}.csv"
@@ -33,6 +33,9 @@ class GPQAEval(Eval):
         examples = [example | {"permutation": rng.sample(range(4), 4)} for example in examples]
         self.examples = examples
         self.n_repeats = n_repeats
+        self.confidence_type = confidence_type[0] if isinstance(confidence_type, list) else confidence_type
+        self.outputs: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'logprobs'])
+        self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'logprobs', 'score'])
 
     def __call__(self, sampler: SamplerBase) -> EvalResult:
         def fn(row: dict):
@@ -50,19 +53,55 @@ class GPQAEval(Eval):
             )
             prompt_messages = [
                 sampler._pack_message(
-                    content=format_multichoice_question(choices_dict), role="user"
+                    content=format_multichoice_question(choices_dict) + " Response starting with the word 'Answer:' followed by only one of ABCD and the option", role="user"
                 )
             ]
-            response_text = sampler(prompt_messages)
-            match = re.search(ANSWER_PATTERN_MULTICHOICE, response_text)
-            extracted_answer = match.group(1) if match else None
-            score = 1.0 if extracted_answer == correct_answer else 0.0
+            print(format_multichoice_question(choices_dict))
+
+            # prepare (response_text, extracted_answer, confidence, score, new_ece_row, new_output_row) with different confidence types
+            #---------------------------------------------------------------------------------------------------------------------
+            sampling = 2
+
+            match self.confidence_type:
+                
+                case "single-generation":
+                    response_with_conf = sampler(prompt_messages)
+                    response_text, confidence, logprobs = response_with_conf 
+                    extracted_answer = gpqa_regex_extract_response(response_text)
+                    score = 1.0 if extracted_answer == correct_answer else 0.0
+                    new_output_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [format_multichoice_question(choices_dict)], 'answer':[correct_answer], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence], "logprobs": [logprobs]})
+                    new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [format_multichoice_question(choices_dict)], 'answer':[correct_answer], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence], "logprobs": [logprobs], 'score': [score]})
+
+                case "empirical-semantic":
+                    response_with_conf = [sampler(prompt_messages) for _ in range(sampling)]
+                    logprobs = [(r[2]) for r in response_with_conf]
+                    extracted_answers = [gpqa_regex_extract_response(text[0]) for text in response_with_conf]
+                    response_texts, lnll_lst, labels = get_mcq_clusters(response_with_conf, "gpqa")
+                    response_text, confidence, index = empirical_semantic_confidence(lnll_lst, response_texts, labels)
+                    extracted_answer = gpqa_regex_extract_response(response_text)
+                    score = 1.0 if extracted_answer == correct_answer else 0.0
+                    new_output_row = pandas.DataFrame({'prompt': [prompt_messages] * sampling, 'question': [format_multichoice_question(choices_dict)] * sampling, 'answer': [correct_answer] * sampling, 'response_raw': response_texts, 'response_extracted': extracted_answers, 'confidence': lnll_lst, "logprobs": logprobs})
+                    new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [format_multichoice_question(choices_dict)], 'answer':[correct_answer], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence], "logprobs": [logprobs[index]], 'score': [score]})
+                    
+                case "verbal-vanilla": 
+                    response_text, extracted_answer, confidence, score, new_ece_row, new_output_row = gpqa_vanilla_confidence(sampler, prompt_messages, row, correct_answer)
+
+                case "verbal-cot": 
+                    response_text, extracted_answer, confidence, score, new_ece_row, new_output_row = gpqa_cot_confidence(sampler, prompt_messages, row, correct_answer)
+                    
+                case _:
+                    raise Exception(f"Unrecognized confidence type: {self.confidence_type}")
+                
+            self.ece_df = pandas.concat([self.ece_df, new_ece_row], ignore_index=True)
+            self.outputs = pandas.concat([self.outputs, new_output_row], ignore_index=True)
+            #---------------------------------------------------------------------------------------------------------------------
             html = common.jinja_env.from_string(HTML_JINJA).render(
                 prompt_messages=prompt_messages,
                 next_message=dict(content=response_text, role="assistant"),
                 score=score,
                 correct_answer=correct_answer,
                 extracted_answer=extracted_answer,
+                confidence=confidence,
             )
             convo = prompt_messages + [dict(content=response_text, role="assistant")]
             return SingleEvalResult(
@@ -70,4 +109,9 @@ class GPQAEval(Eval):
             )
 
         results = common.map_with_progress(fn, self.examples)
+        self.outputs.to_csv(f"tmp/{sampler.model_name}_gpqa_{self.confidence_type}_outputs.csv")
+        self.ece_df.to_csv(f"tmp/{sampler.model_name}_gpqa_{self.confidence_type}_unprocessed_ece.csv")
+        print(self.outputs)
+        print(ece_equal_weight(self.ece_df, 10, f"tmp/{sampler.model_name}_gpqa_{self.confidence_type}_equal_weight_ece.csv"))
+        print(ece_equal_width(self.ece_df, 10, f"tmp/{sampler.model_name}_gpqa_{self.confidence_type}_equal_width_ece.csv"))
         return common.aggregate_results(results)

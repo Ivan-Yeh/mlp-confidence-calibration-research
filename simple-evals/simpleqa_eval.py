@@ -11,6 +11,7 @@ from . import common
 from .types import Eval, EvalResult, SamplerBase, SingleEvalResult
 
 from .ece import ece_equal_width, ece_equal_weight
+from .semantic_confidence import *
 
 GRADER_TEMPLATE = """
 Your job is to look at a question, a gold target, and a predicted answer, and then assign a grade of either ["CORRECT", "INCORRECT", "NOT_ATTEMPTED"].
@@ -103,7 +104,7 @@ CHOICE_STRINGS = ["CORRECT", "INCORRECT", "NOT_ATTEMPTED"]
 CHOICE_LETTER_TO_STRING = dict(zip(CHOICE_LETTERS, CHOICE_STRINGS))
 
 class SimpleQAEval(Eval):
-    def __init__(self, grader_model: SamplerBase, num_examples: int | None = None, n_repeats: int = 1):
+    def __init__(self, grader_model: SamplerBase, num_examples: int | None = None, n_repeats: int = 1, confidence_type = "single-generation"):
         df = pandas.read_csv(
             f"https://openaipublic.blob.core.windows.net/simple-evals/simple_qa_test_set.csv"
         )
@@ -114,7 +115,9 @@ class SimpleQAEval(Eval):
             examples = rng.sample(examples, num_examples)
         self.examples = examples * n_repeats
         self.grader_model = grader_model
-        self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['question', 'answer', 'predicted_answer', 'confidence', 'accuracy'])
+        self.confidence_type = confidence_type
+        self.outputs: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'logprobs'])
+        self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'logprobs', 'score'])
 
     def grade_sample(self, question: str, target: str, predicted_answer: str) -> str:
         grader_prompt = GRADER_TEMPLATE.format(
@@ -127,7 +130,7 @@ class SimpleQAEval(Eval):
             self.grader_model._pack_message(content=grader_prompt, role="user"),
             self.grader_model._pack_message(content="You are a careful judge, assessing whether the given predicted answer is correct according to the gold target.", role="system")
         ]
-        grading_response = self.grader_model(prompt_messages)
+        grading_response = self.grader_model(prompt_messages)[0]
         
         match = re.search(r"(A|B|C)", grading_response)
         return match.group(0) if match else "C"  # Default to "NOT_ATTEMPTED" if no match
@@ -142,77 +145,104 @@ class SimpleQAEval(Eval):
         return 0
 
     def __call__(self, sampler: SamplerBase) -> EvalResult:
-            def fn(row: dict):
-                prompt_messages = [
-                    sampler._pack_message(content=row.get("problem", "") + "Be concise. At the very end of your response, add your confidence in percentage in the correctness of your response in square brackets without explanation.", role="user")
-                ]
-                response_text = sampler(prompt_messages)
-                grade_letter = self.grade_sample(row.get("problem", ""), row.get("answer", ""), response_text)
-                new_row = pandas.DataFrame({"question": [row.get("problem", "")], "answer": [row.get("answer", "")], "predicted_answer": [response_text], "confidence": [self.extract_confidence(response_text)], "accuracy": [grade_letter == "A"]})
-                print(new_row.to_dict())
-                self.ece_df = pandas.concat([self.ece_df, new_row], ignore_index=True)
-
-                # Metrics based on grading response
-                is_correct = grade_letter == "A"
-                is_incorrect = grade_letter == "B"
-                is_not_attempted = grade_letter == "C"
+        def fn(row: dict):
+            #-----------------------------------------------------------------------------------
+            sampling = 2
+            match self.confidence_type:
                 
-                score = is_correct
+                case "empirical-semantic":
+                    prompt_messages = [
+                        sampler._pack_message(content=row.get("problem", ""), role="user")
+                    ]
+                    response_with_conf = [sampler(prompt_messages) for _ in range(sampling)]
+                    logprobs = [(r[2]) for r in response_with_conf]
+                    response_texts, lnll_lst, labels = get_semantic_clusters(response_with_conf)
+                    response_text, confidence, index = empirical_semantic_confidence(lnll_lst, response_texts, labels)
+                    grade_letter = self.grade_sample(row.get("problem", ""), row.get("answer", ""), response_text)
 
-                # Create HTML for each sample result
-                html = common.jinja_env.from_string(common.HTML_JINJA).render(
-                    prompt_messages=prompt_messages,
-                    next_message=dict(content=response_text, role="assistant"),
-                    score=score,
-                    correct_answer=row["answer"],
-                    extracted_answer=response_text,
-                )
-                convo = prompt_messages + [dict(content=response_text, role="assistant")]
-                return SingleEvalResult(html=html, score=score, convo=convo, metrics={
-                    "is_correct": is_correct,
-                    "is_incorrect": is_incorrect,
-                    "is_not_attempted": is_not_attempted
-                })
+                    new_output_row = pandas.DataFrame({'prompt': [prompt_messages] * sampling, 'question': [row.get("problem", "")] * sampling, 'answer': [row.get("answer", "")] * sampling, 'response_raw': response_texts, 'response_extracted': response_texts, 'confidence': lnll_lst, "logprobs": logprobs})
+                    new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [row.get("problem", "")], 'answer':[row.get("answer", "")], 'response_raw': [response_text], 'response_extracted': [response_text], 'confidence': [confidence], "logprobs": [logprobs[index]], 'score': [grade_letter == "A"]})
 
-            # Run evaluation and collect results
-            results = common.map_with_progress(fn, self.examples)
+                case "single-generation":
+                    prompt_messages = [
+                        sampler._pack_message(content=row.get("problem", ""), role="user")
+                    ]
+                    response_text, confidence, logprobs = sampler(prompt_messages)
+                    grade_letter = self.grade_sample(row.get("problem", ""), row.get("answer", ""), response_text)
 
-            # Aggregate metrics
-            aggregate_metrics = {
-                "is_correct": sum(result.metrics["is_correct"] for result in results) / len(results),
-                "is_incorrect": sum(result.metrics["is_incorrect"] for result in results) / len(results),
-                "is_not_attempted": sum(result.metrics["is_not_attempted"] for result in results) / len(results),
-            }
-            aggregate_metrics["is_given_attempted"] = aggregate_metrics["is_correct"] + aggregate_metrics["is_incorrect"]
-            # Calculate accuracy_given_attempted
-            aggregate_metrics["accuracy_given_attempted"] = (
-                aggregate_metrics["is_correct"]
-                / aggregate_metrics["is_given_attempted"]
-                if aggregate_metrics["is_given_attempted"] > 0
+                    new_output_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [row.get("problem", "")], 'answer': [row.get("answer", "")], 'response_raw': [response_text], 'response_extracted': [response_text], 'confidence': [confidence], "logprobs": [logprobs]})
+                    new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [row.get("problem", "")], 'answer':[row.get("answer", "")], 'response_raw': [response_text], 'response_extracted': [response_text], 'confidence': [confidence], "logprobs": [logprobs], 'score': [grade_letter == "A"]})
+
+                case _:
+                    raise Exception(f"Unrecognized confidence type: {self.confidence_type}")
+                
+            self.ece_df = pandas.concat([self.ece_df, new_ece_row], ignore_index=True) 
+            self.outputs = pandas.concat([self.outputs, new_output_row], ignore_index=True) 
+            
+            
+            # ----------------------------------------------------------------------------------
+
+            # Metrics based on grading response
+            is_correct = grade_letter == "A"
+            is_incorrect = grade_letter == "B"
+            is_not_attempted = grade_letter == "C"
+            
+            score = is_correct
+
+            # Create HTML for each sample result
+            html = common.jinja_env.from_string(common.HTML_JINJA).render(
+                prompt_messages=prompt_messages,
+                next_message=dict(content=response_text, role="assistant"),
+                score=score,
+                correct_answer=row["answer"],
+                extracted_answer=response_text,
+                confidence = confidence
+            )
+            convo = prompt_messages + [dict(content=response_text, role="assistant")]
+            return SingleEvalResult(html=html, score=score, convo=convo, metrics={
+                "is_correct": is_correct,
+                "is_incorrect": is_incorrect,
+                "is_not_attempted": is_not_attempted
+            })
+
+        # Run evaluation and collect results
+        results = common.map_with_progress(fn, self.examples)
+
+        # Aggregate metrics
+        aggregate_metrics = {
+            "is_correct": sum(result.metrics["is_correct"] for result in results) / len(results),
+            "is_incorrect": sum(result.metrics["is_incorrect"] for result in results) / len(results),
+            "is_not_attempted": sum(result.metrics["is_not_attempted"] for result in results) / len(results),
+        }
+        aggregate_metrics["is_given_attempted"] = aggregate_metrics["is_correct"] + aggregate_metrics["is_incorrect"]
+        # Calculate accuracy_given_attempted
+        aggregate_metrics["accuracy_given_attempted"] = (
+            aggregate_metrics["is_correct"]
+            / aggregate_metrics["is_given_attempted"]
+            if aggregate_metrics["is_given_attempted"] > 0
+            else 0
+        )
+        self.outputs.to_csv(f"tmp/{sampler.model_name}_simpleqa_{self.confidence_type}_outputs.csv")
+        self.ece_df.to_csv(f"tmp/{sampler.model_name}_simpleqa_{self.confidence_type}_unprocessed_ece.csv")
+        print(self.outputs)
+        print(ece_equal_weight(self.ece_df, 10, f"tmp/{sampler.model_name}_simpleqa_{self.confidence_type}_equal_weight_ece.csv"))
+        print(ece_equal_width(self.ece_df, 10, f"tmp/{sampler.model_name}_simpleqa_{self.confidence_type}_equal_width_ece.csv"))
+        print("AGGREGATE METRICS") 
+        print(aggregate_metrics) 
+        print("##################")
+
+        output_d = {
+            "accuracy_given_attempted": aggregate_metrics["accuracy_given_attempted"],
+            "f1": (
+                2 * aggregate_metrics["accuracy_given_attempted"] * aggregate_metrics["is_correct"]
+                / (aggregate_metrics["accuracy_given_attempted"] + aggregate_metrics["is_correct"])
+                if (aggregate_metrics["accuracy_given_attempted"] + aggregate_metrics["is_correct"]) > 0
                 else 0
             )
-
-            # Calculate ECE
-            print(ece_equal_weight(self.ece_df))
-            print(ece_equal_width(self.ece_df))
-
-            print("AGGREGATE METRICS") 
-            print(aggregate_metrics) 
-            print("##################")
-
-            output_d = {
-                "accuracy_given_attempted": aggregate_metrics["accuracy_given_attempted"],
-                "f1": (
-                    2 * aggregate_metrics["accuracy_given_attempted"] * aggregate_metrics["is_correct"]
-                    / (aggregate_metrics["accuracy_given_attempted"] + aggregate_metrics["is_correct"])
-                    if (aggregate_metrics["accuracy_given_attempted"] + aggregate_metrics["is_correct"]) > 0
-                    else 0
-                )
-            }
-            
-            print(f"Accuracy Given Attempted: {output_d['accuracy_given_attempted']:.3f}")
-            print(f"F1 Score: {output_d['f1']:.3f}")
-            self.ece_df.to_csv("tmp/simpleqa.csv")
-            return common.aggregate_results(results)
+        }
+        
+        print(f"Accuracy Given Attempted: {output_d['accuracy_given_attempted']:.3f}")
+        print(f"F1 Score: {output_d['f1']:.3f}")
+        return common.aggregate_results(results)
     
 

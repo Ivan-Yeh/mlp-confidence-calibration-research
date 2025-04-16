@@ -2,6 +2,14 @@
 
 This project is still being developed... 🔨
 
+# File Management
+- simple_evals_ext.py: an extension from simple_evals.py; add HF model support.
+
+
+# Extension to Simple Evals:
+- 
+
+
 # Language Model Evaluation Pipeline
 
 ## Huggingface Downloader Instructions
@@ -9,6 +17,19 @@ This project is still being developed... 🔨
 To download a model from Huggingface, run:
 
 `python3 hf_downloader.py [Huggingface token] [Huggingface model id]`
+
+
+## MMLU
+
+`python -m simple-evals.simple_evals_ext --list-tests`
+
+`python -m simple-evals.simple_evals_ext --list-models`
+
+`python -m simple-evals.simple_evals_ext --list-confidence`
+
+`python -m simple-evals.simple_evals_ext --model meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8 --test gpqa --confidence verbal-vanilla --examples 2`
+
+
 
 ## Simple QA
 
