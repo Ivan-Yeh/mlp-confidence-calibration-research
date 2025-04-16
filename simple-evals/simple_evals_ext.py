@@ -49,8 +49,9 @@ def main():
     args = parser.parse_args()
 
     with open("api.json", "r") as f:
-        DATABRICKS_TOKEN = json.load(f)["DATABRICKS_TOKEN"]
-        TOGETHER_AI_TOKEN = json.load(f)["TOGETHER_AI_TOKEN"]
+        api_tokens = json.load(f)
+        DATABRICKS_TOKEN = api_tokens["DATABRICKS_TOKEN"]
+        TOGETHER_AI_TOKEN = api_tokens["TOGETHER_AI_TOKEN"]
 
     models = {
         # chatgpt models:

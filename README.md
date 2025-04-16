@@ -27,7 +27,7 @@ To download a model from Huggingface, run:
 
 `python -m simple-evals.simple_evals_ext --list-confidence`
 
-`python -m simple-evals.simple_evals_ext --model meta-llama/Llama-3.2-3B-Instruct --test mmlu --confidence logits --examples 3`
+`python -m simple-evals.simple_evals_ext --model meta-llama/Llama-3.2-3B-Instruct --test mmlu --confidence single-generation --examples 3`
 
 
 
