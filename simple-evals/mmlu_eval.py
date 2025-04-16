@@ -93,8 +93,8 @@ class MMLUEval(Eval):
             examples = random.Random(0).sample(examples, num_examples)
         self.examples = examples
         self.confidence_type = confidence_type[0] if isinstance(confidence_type, list) else confidence_type
-        self.outputs: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence'])
-        self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'score'])
+        self.outputs: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'logprobs'])
+        self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'logprobs', 'score'])
 
 
     def __call__(self, sampler: SamplerBase) -> EvalResult:
@@ -117,21 +117,22 @@ class MMLUEval(Eval):
                 
                 case "single-generation":
                     response_with_conf = sampler(prompt_messages)
-                    response_text, confidence = response_with_conf 
+                    response_text, confidence, logprobs = response_with_conf 
                     extracted_answer = mmlu_regex_extract_response(response_text)
                     score = 1.0 if extracted_answer == row["Answer"] else 0.0
-                    new_output_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [format_multichoice_question(row)], 'answer':[row["Answer"]], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence]})
-                    new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [format_multichoice_question(row)], 'answer':[row["Answer"]], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence], 'score': [score]})
+                    new_output_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [format_multichoice_question(row)], 'answer':[row["Answer"]], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence], "logprobs": [logprobs]})
+                    new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [format_multichoice_question(row)], 'answer':[row["Answer"]], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence], "logprobs": [logprobs], 'score': [score]})
 
                 case "empirical-semantic":
                     response_with_conf = [sampler(prompt_messages) for _ in range(sampling)]
+                    logprobs = [(r[2]) for r in response_with_conf]
                     extracted_answers = [mmlu_regex_extract_response(text[0]) for text in response_with_conf]
                     response_texts, lnll_lst, labels = get_mcq_clusters(response_with_conf, "mmlu")
-                    response_text, confidence = empirical_semantic_confidence(lnll_lst, response_texts, labels)
+                    response_text, confidence, index = empirical_semantic_confidence(lnll_lst, response_texts, labels)
                     extracted_answer = mmlu_regex_extract_response(response_text)
                     score = 1.0 if extracted_answer == row["Answer"] else 0.0
-                    new_output_row = pandas.DataFrame({'prompt': [prompt_messages] * sampling, 'question': [format_multichoice_question(row)] * sampling, 'answer': [row["Answer"]] * sampling, 'response_raw': response_texts, 'response_extracted': extracted_answers, 'confidence': lnll_lst})
-                    new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [format_multichoice_question(row)], 'answer':[row["Answer"]], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence], 'score': [score]})
+                    new_output_row = pandas.DataFrame({'prompt': [prompt_messages] * sampling, 'question': [format_multichoice_question(row)] * sampling, 'answer': [row["Answer"]] * sampling, 'response_raw': response_texts, 'response_extracted': extracted_answers, 'confidence': lnll_lst, "logprobs": logprobs})
+                    new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [format_multichoice_question(row)], 'answer':[row["Answer"]], 'response_raw': [response_text], 'response_extracted': [extracted_answer], 'confidence': [confidence], "logprobs": [logprobs[index]], 'score': [score]})
                 
                 case "verbal-vanilla": 
                     response_text, extracted_answer, confidence, score, new_ece_row, new_output_row = mmlu_vanilla_confidence(sampler, prompt_messages, row)

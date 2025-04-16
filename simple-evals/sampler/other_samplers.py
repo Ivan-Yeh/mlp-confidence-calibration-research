@@ -70,8 +70,10 @@ class HFSampler(SamplerBase):
                         top_p =0.9,
                         pad_token_id=self.tokeniser.eos_token_id
                     )
-                # return response_text and logprob based confidence
-                return "".join(self.tokeniser.batch_decode(outputs.sequences[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True)), float(np.exp(self.model.compute_transition_scores(outputs.sequences, outputs.scores, normalize_logits=True).numpy(force=True)).mean())
+                # return response_text, logprob based confidence and log_probs
+                return ("".join(self.tokeniser.batch_decode(outputs.sequences[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True)), 
+                        float(np.exp(self.model.compute_transition_scores(outputs.sequences, outputs.scores, normalize_logits=True).numpy(force=True)).mean()), 
+                        self.model.compute_transition_scores(outputs.sequences, outputs.scores, normalize_logits=True).numpy(force=True))
 
             # NOTE: BadRequestError is triggered once for MMMU, please uncomment if you are reruning MMMU
             except Exception as e:
@@ -133,8 +135,8 @@ class DBSampler(SamplerBase):
                 client = OpenAI(api_key=self.api_key, base_url=(self.model_url[0] if isinstance(self.model_url, tuple) else self.model_url))
                 chat_completion = client.chat.completions.create(messages=message_list, model=self.model_name, max_tokens=self.max_tokens, logprobs=True)
 
-                # return response_text and logprob based confidence
-                return chat_completion.choices[0].message.content, float(np.exp(np.array([t.logprob for t in chat_completion.choices[0].logprobs.content])).mean())
+                # return response_text, logprob based confidence and log_probs
+                return chat_completion.choices[0].message.content, float(np.exp(np.array([t.logprob for t in chat_completion.choices[0].logprobs.content])).mean()), [t.logprob for t in chat_completion.choices[0].logprobs.content]
             # NOTE: BadRequestError is triggered once for MMMU, please uncomment if you are reruning MMMU
             except Exception as e:
                 exception_backoff = 2**trial  # expontial back off
@@ -195,10 +197,10 @@ class TogetherSampler(SamplerBase):
         while True:
             try:
                 client = Together(api_key=self.api_key)
-                chat_completion = client.chat.completions.create(messages=message_list, model=self.model_id, max_tokens=self.max_tokens, logprobs=1)
+                chat_completion = client.chat.completions.create(messages=message_list, model=(self.model_id[0] if isinstance(self.model_id, tuple) else self.model_id), max_tokens=self.max_tokens, logprobs=1)
 
-                # return response_text and logprob based confidence
-                return chat_completion.choices[0].message.content, float(np.exp(chat_completion.choices[0].logprobs.token_logprobs).mean())
+                # return response_text, logprob based confidence and log_probs
+                return chat_completion.choices[0].message.content, float(np.exp(chat_completion.choices[0].logprobs.token_logprobs).mean()), chat_completion.choices[0].logprobs.token_logprobs
             # NOTE: BadRequestError is triggered once for MMMU, please uncomment if you are reruning MMMU
             except Exception as e:
                 exception_backoff = 2**trial  # expontial back off

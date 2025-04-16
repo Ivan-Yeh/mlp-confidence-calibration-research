@@ -121,6 +121,7 @@ def main():
         # ),
         # HF models: None by default; only constructed when chosen
         "mistralai/Mixtral-8x7B-Instruct-v0.1": TogetherSampler(api_key=TOGETHER_AI_TOKEN, model_id="mistralai/Mixtral-8x7B-Instruct-v0.1", model_name="mistralai/Mixtral-8x7B-Instruct-v0.1", max_tokens=128),
+        "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8": TogetherSampler(api_key=TOGETHER_AI_TOKEN, model_id="meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8", model_name="meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8", max_tokens=2048),
         "databricks-meta-llama-3-3-70b-instruct": DBSampler(api_key=DATABRICKS_TOKEN, model_url="https://dbc-b04afa5d-8e3e.cloud.databricks.com/serving-endpoints", model_name="databricks-meta-llama-3-3-70b-instruct", max_tokens=128),
         "databricks-claude-3-7-sonnet": DBSampler(api_key=DATABRICKS_TOKEN, model_url="https://dbc-b04afa5d-8e3e.cloud.databricks.com/serving-endpoints", model_name="databricks-claude-3-7-sonnet", max_tokens=128),
         "meta-llama/Llama-3.2-3B-Instruct": None,
@@ -184,11 +185,16 @@ def main():
     # equality_checker = ChatCompletionSampler(model="gpt-4-turbo-preview")
     # ^^^ used for fuzzy matching, just for math
 
-    local_dir = snapshot_download(repo_id="meta-llama/Llama-3.2-3B-Instruct")
-    model = LlamaForCausalLM.from_pretrained(local_dir, torch_dtype=torch.float16, low_cpu_mem_usage=True)
-    tokeniser = AutoTokenizer.from_pretrained(local_dir)
-    grading_sampler = HFSampler(model=model, tokeniser=tokeniser, model_name=args.model, max_new_tokens=256)
-    equality_checker = HFSampler(model=model, tokeniser=tokeniser, model_name=args.model, max_new_tokens=256)
+    # local_dir = snapshot_download(repo_id="meta-llama/Llama-3.2-3B-Instruct")
+    # model = LlamaForCausalLM.from_pretrained(local_dir, torch_dtype=torch.float16, low_cpu_mem_usage=True)
+    # tokeniser = AutoTokenizer.from_pretrained(local_dir)
+    # grading_sampler = HFSampler(model=model, tokeniser=tokeniser, model_name=args.model, max_new_tokens=256)
+    # equality_checker = HFSampler(model=model, tokeniser=tokeniser, model_name=args.model, max_new_tokens=256)
+    # ^^^ use local LLAMA
+
+    grading_sampler = TogetherSampler(api_key=TOGETHER_AI_TOKEN, model_id="meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8", model_name="meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8", max_tokens=2048)
+    equality_checker = TogetherSampler(api_key=TOGETHER_AI_TOKEN, model_id="meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8", model_name="meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8", max_tokens=2048)
+    # ^^^ use Together AI
 
     def get_evals(eval_name, debug_mode):
         num_examples = (

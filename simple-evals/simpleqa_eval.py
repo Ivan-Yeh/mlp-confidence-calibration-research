@@ -116,9 +116,8 @@ class SimpleQAEval(Eval):
         self.examples = examples * n_repeats
         self.grader_model = grader_model
         self.confidence_type = confidence_type
-        self.outputs = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence'])
-        self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'score'])
-        # self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['question', 'answer', 'predicted_answer', 'confidence', 'accuracy'])
+        self.outputs: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'logprobs'])
+        self.ece_df: pandas.DataFrame = pandas.DataFrame(columns=['prompt', 'question', 'answer', 'response_raw', 'response_extracted', 'confidence', 'logprobs', 'score'])
 
     def grade_sample(self, question: str, target: str, predicted_answer: str) -> str:
         grader_prompt = GRADER_TEMPLATE.format(
@@ -156,22 +155,23 @@ class SimpleQAEval(Eval):
                         sampler._pack_message(content=row.get("problem", ""), role="user")
                     ]
                     response_with_conf = [sampler(prompt_messages) for _ in range(sampling)]
+                    logprobs = [(r[2]) for r in response_with_conf]
                     response_texts, lnll_lst, labels = get_semantic_clusters(response_with_conf)
-                    response_text, confidence = empirical_semantic_confidence(lnll_lst, response_texts, labels)
+                    response_text, confidence, index = empirical_semantic_confidence(lnll_lst, response_texts, labels)
                     grade_letter = self.grade_sample(row.get("problem", ""), row.get("answer", ""), response_text)
 
-                    new_output_row = pandas.DataFrame({'prompt': [prompt_messages] * sampling, 'question': [row.get("problem", "")] * sampling, 'answer': [row.get("answer", "")] * sampling, 'response_raw': response_texts, 'response_extracted': response_texts, 'confidence': lnll_lst})
-                    new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [row.get("problem", "")], 'answer':[row.get("answer", "")], 'response_raw': [response_text], 'response_extracted': [response_text], 'confidence': [confidence], 'score': [grade_letter == "A"]})
+                    new_output_row = pandas.DataFrame({'prompt': [prompt_messages] * sampling, 'question': [row.get("problem", "")] * sampling, 'answer': [row.get("answer", "")] * sampling, 'response_raw': response_texts, 'response_extracted': response_texts, 'confidence': lnll_lst, "logprobs": logprobs})
+                    new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [row.get("problem", "")], 'answer':[row.get("answer", "")], 'response_raw': [response_text], 'response_extracted': [response_text], 'confidence': [confidence], "logprobs": [logprobs[index]], 'score': [grade_letter == "A"]})
 
                 case "single-generation":
                     prompt_messages = [
                         sampler._pack_message(content=row.get("problem", ""), role="user")
                     ]
-                    response_text, confidence = sampler(prompt_messages)
+                    response_text, confidence, logprobs = sampler(prompt_messages)
                     grade_letter = self.grade_sample(row.get("problem", ""), row.get("answer", ""), response_text)
 
-                    new_output_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [row.get("problem", "")], 'answer': [row.get("answer", "")], 'response_raw': [response_text], 'response_extracted': [response_text], 'confidence': [confidence]})
-                    new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [row.get("problem", "")], 'answer':[row.get("answer", "")], 'response_raw': [response_text], 'response_extracted': [response_text], 'confidence': [confidence], 'score': [grade_letter == "A"]})
+                    new_output_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [row.get("problem", "")], 'answer': [row.get("answer", "")], 'response_raw': [response_text], 'response_extracted': [response_text], 'confidence': [confidence], "logprobs": [logprobs]})
+                    new_ece_row = pandas.DataFrame({'prompt': [prompt_messages], 'question': [row.get("problem", "")], 'answer':[row.get("answer", "")], 'response_raw': [response_text], 'response_extracted': [response_text], 'confidence': [confidence], "logprobs": [logprobs], 'score': [grade_letter == "A"]})
 
                 case _:
                     raise Exception(f"Unrecognized confidence type: {self.confidence_type}")

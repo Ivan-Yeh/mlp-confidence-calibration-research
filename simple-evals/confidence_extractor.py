@@ -73,7 +73,8 @@ def regex_extract_reponse(response_text) -> str | None:
 def mmlu_vanilla_confidence(sampler: SamplerBase, prompt_messages: str, row) -> tuple:
     sampler.system_message = VANILLA_PROMPT
 
-    response_text = normalize_response(sampler(prompt_messages)[0])
+    response_text, _, log_probs = sampler(prompt_messages)
+    response_text = normalize_response(response_text)
 
     confidence = 0.0
     ans_and_conf = response_text.split('\n')[0].replace("%", "").replace(")", ":").replace(",", ":")
@@ -101,15 +102,15 @@ def mmlu_vanilla_confidence(sampler: SamplerBase, prompt_messages: str, row) -> 
     score = 1.0 if extracted_answer == row["Answer"] else 0.0
 
     new_row = pandas.DataFrame({"prompt": [prompt_messages], "question": [format_multichoice_question(row)], 
-        "answer": [row.get("Answer")], "response_raw": [response_text], "response_extracted": [extracted_answer], "confidence": [confidence], "score": [score]})
+        "answer": [row.get("Answer")], "response_raw": [response_text], "response_extracted": [extracted_answer], "confidence": [confidence], "logprobs": [log_probs], "score": [score]})
 
-    return (response_text, extracted_answer, confidence, score, new_row, new_row)
+    return (response_text, extracted_answer, confidence, score, new_row, new_row.drop(columns=["score"]))
     
 def mmlu_cot_confidence(sampler: SamplerBase, prompt_messages: str, row) -> tuple:
     sampler.system_message = COT_PROMPT
 
-    response_text = normalize_response(sampler(prompt_messages)[0])
-
+    response_text, _, log_probs = sampler(prompt_messages)
+    response_text = normalize_response(response_text)
     confidence = 0.0
     ans_and_conf = response_text.split('\n')[-1].split(':')[-1].strip(' ').replace("%", "").replace(',', ":").replace(')', ":").replace(' ', ':')
     try:
@@ -141,14 +142,15 @@ def mmlu_cot_confidence(sampler: SamplerBase, prompt_messages: str, row) -> tupl
     score = 1.0 if extracted_answer == row["Answer"] else 0.0
 
     new_row = pandas.DataFrame({"prompt": [prompt_messages], "question": [format_multichoice_question(row)], 
-        "answer": [row.get("Answer")], "response_raw": [response_text], "response_extracted": [extracted_answer], "confidence": [confidence], "score": [score]})
+        "answer": [row.get("Answer")], "response_raw": [response_text], "response_extracted": [extracted_answer], "confidence": [confidence], "logprobs": [log_probs], "score": [score]})
 
     return (response_text, extracted_answer, confidence, score, new_row, new_row)
 
-def gpqa_vanilla_confidence(sampler: SamplerBase, prompt_messages: str, row) -> tuple:
+def gpqa_vanilla_confidence(sampler: SamplerBase, prompt_messages: str, row, correct_answer) -> tuple:
     sampler.system_message = VANILLA_PROMPT
 
-    response_text = sampler(prompt_messages)[0]
+    response_text, _, log_probs = sampler(prompt_messages)
+    response_text = normalize_response(response_text)
 
     confidence = 0.0
     ans_and_conf = response_text.split('\n')[0].replace("%", "").replace(")", ":").replace(",", ":")
@@ -168,16 +170,17 @@ def gpqa_vanilla_confidence(sampler: SamplerBase, prompt_messages: str, row) -> 
             if len(answer_candidate) == 1: #only one answer is provided in the response
                 extracted_answer = answer_candidate
 
-    score = 1.0 if extracted_answer == row["Correct Answer"] else 0.0
+    score = 1.0 if extracted_answer == correct_answer else 0.0
 
     new_row = pandas.DataFrame({"prompt": [prompt_messages], "question": [row["Question"]], 
-        "answer": [row.get("Correct Answer")], "response_raw": [response_text], "response_extracted": [extracted_answer], "confidence": [confidence], "score": [score]})
+        "answer": [row.get("Correct Answer")], "response_raw": [response_text], "response_extracted": [extracted_answer], "confidence": [confidence], "logprobs": [log_probs], "score": [score]})
 
-    return (response_text, extracted_answer, confidence, score, new_row, new_row)
+    return (response_text, extracted_answer, confidence, score, new_row,  new_row.drop(columns=["score"]))
 
-def gpqa_cot_confidence(sampler: SamplerBase, prompt_messages: str, row) -> tuple:
+def gpqa_cot_confidence(sampler: SamplerBase, prompt_messages: str, row, correct_answer) -> tuple:
     sampler.system_message = COT_PROMPT
-    response_text = sampler(prompt_messages)[0]
+    response_text, _, log_probs = sampler(prompt_messages)
+    response_text = normalize_response(response_text)
 
     confidence = 0.0
     ans_and_conf = response_text.split('\n')[-1].split(':')[-1].strip(' ').replace("%", "").replace(',', ":").replace(')', ":").replace(' ', ':')
@@ -202,9 +205,9 @@ def gpqa_cot_confidence(sampler: SamplerBase, prompt_messages: str, row) -> tupl
             if len(answer_candidate) == 1: #only one answer is provided in the response
                 extracted_answer = answer_candidate
 
-    score = 1.0 if extracted_answer == row["Correct Answer"] else 0.0
+    score = 1.0 if extracted_answer == correct_answer else 0.0
 
     new_row = pandas.DataFrame({"prompt": [prompt_messages], "question": [row["Question"]], 
-        "answer": [row.get("Correct Answer")], "response_raw": [response_text], "response_extracted": [extracted_answer], "confidence": [confidence], "score": [score]})
+        "answer": [row.get("Correct Answer")], "response_raw": [response_text], "response_extracted": [extracted_answer], "confidence": [confidence], "logprobs": [log_probs], "score": [score]})
 
-    return (response_text, extracted_answer, confidence, score, new_row, new_row)
+    return (response_text, extracted_answer, confidence, score, new_row,  new_row.drop(columns=["score"]))

@@ -4,7 +4,7 @@ import pandas as pd
 from . import common
 from .mmlu_eval import MMLUEval
 from .gpqa_eval import GPQAEval
-from .sampler.hf_sampler import HFSampler
+from .sampler.other_samplers import *
 import torch
 import transformers
 from huggingface_hub import snapshot_download, login

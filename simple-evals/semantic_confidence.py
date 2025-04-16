@@ -61,8 +61,8 @@ def get_mcq_clusters(multi_response, test = "mmlu"):
 def empirical_semantic_confidence(lnll_lst, response_list, labels):
     counts = Counter(labels)
     opt_cluster, opt_conf = max([(int(cluster_id), count/sum(counts.values())) for cluster_id, count in counts.items()], key=lambda x: x[1])
-    optimal_response = max([(response_list[i], lnll_lst[i]) for i, label in enumerate(labels) if label == opt_cluster], key=lambda x: x[1])[0]
-    return optimal_response, opt_conf
+    optimal_response, index = max([(response_list[i], i) for i, label in enumerate(labels) if label == opt_cluster], key=lambda x: x[1])
+    return optimal_response, opt_conf, index
 
 
 def likelihood_based_semantic_confidence(lnll_lst, response_list, labels):
@@ -75,9 +75,8 @@ def likelihood_based_semantic_confidence(lnll_lst, response_list, labels):
     lsc = [(c[0], c[1] / total_lsc) for c in clustered]
     
     opt_cluster, opt_conf = max(lsc, key=lambda x: x[1])
-    optimal_response = max([(response_list[i], lnll_lst[i]) for i, label in enumerate(labels) if label == opt_cluster], key=lambda x: x[1])[0]
-
-    return optimal_response, opt_conf
+    optimal_response, index = max([(response_list[i], i) for i, label in enumerate(labels) if label == opt_cluster], key=lambda x: x[1])
+    return optimal_response, opt_conf, index
 
 
 def mean_likelihood_based_semantic_confidence(lnll_lst, response_list, labels):
@@ -90,9 +89,8 @@ def mean_likelihood_based_semantic_confidence(lnll_lst, response_list, labels):
     mlsc = [(c[0], c[1] / total_mlsc) for c in clustered]
     
     opt_cluster, opt_conf = max(mlsc, key=lambda x: x[1])
-    optimal_response = max([(response_list[i], lnll_lst[i]) for i, label in enumerate(labels) if label == opt_cluster], key=lambda x: x[1])[0]
-
-    return optimal_response, opt_conf
+    optimal_response, index = max([(response_list[i], i) for i, label in enumerate(labels) if label == opt_cluster], key=lambda x: x[1])
+    return optimal_response, opt_conf, index
 
 
 def bayesian_semantic_confidence(lnll_lst, response_list, labels):
@@ -106,6 +104,5 @@ def bayesian_semantic_confidence(lnll_lst, response_list, labels):
     bsc = [(c[0], float(c[1] / total_bsc)) for c in clustered]
 
     opt_cluster, opt_conf = max(bsc, key=lambda x: x[1])
-    optimal_response = max([(response_list[i], lnll_lst[i]) for i, label in enumerate(labels) if label == opt_cluster], key=lambda x: x[1])[0]
-
-    return optimal_response, opt_conf
+    optimal_response, index = max([(response_list[i], i) for i, label in enumerate(labels) if label == opt_cluster], key=lambda x: x[1])
+    return optimal_response, opt_conf, index
